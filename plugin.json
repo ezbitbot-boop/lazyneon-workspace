@@ -1,0 +1,37 @@
+{
+  "name": "lazyneon-workspace",
+  "displayName": "LazyNeon Workspace",
+  "version": "0.1.0",
+  "description": "LazyNeon Workspace: independent forensic and Korean legal-document companion for Antigravity with Gemini 4 Neon. Not a forensic acquisition or court-admissibility suite.",
+  "author": {
+    "name": "daeryundf2-prog",
+    "url": "https://github.com/daeryundf2-prog"
+  },
+  "license": "MIT",
+  "hooks": "./hooks.json",
+  "mcpServers": "./mcp_config.json",
+  "pythonDependencies": "./requirements.txt",
+  "suggestedPrompts": [
+    "카카오톡 대화 내보내기 텍스트를 파싱하고 포렌식 타임라인을 생성해줘",
+    "갑호증 PDF 증거 파일들에 전자소송 표준 표찰을 찍고 하나의 바인더로 병합해줘",
+    "이 보고서 초안에서 AI 문체 슬롭을 제거하고 자연스러운 한국어로 윤문해줘"
+  ],
+  "interface": {
+    "displayName": "LazyNeon Workspace",
+    "shortDescription": "Unified Forensics, Legal-Tech, Korean Docs & Humanize KR for Antigravity",
+    "longDescription": "LazyNeon Workspace: independent forensic and Korean legal-document companion for Antigravity with Gemini 4 Neon.",
+    "developerName": "daeryundf2-prog",
+    "category": "DFIR, Legal-Tech & Productivity",
+    "capabilities": [
+      "Kakao & Telegram Chat Export Parsing",
+      "OS Timestamp & SHA-256 Hash Audit",
+      "Timeline Visualization & Report Drafting",
+      "Evidence Write-Lock & Audit Trail",
+      "Korean Official Doc (HWP/HWPX/PDF) Parsing",
+      "ECFS Court Evidence Stamper & PDF Binder",
+      "Legal Brief Draft Builder",
+      "Korean PII Masking & Humanize KR Deslop"
+    ],
+    "brandColor": "#1E3A8A"
+  }
+}

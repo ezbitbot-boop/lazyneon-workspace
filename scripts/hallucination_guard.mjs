@@ -1,0 +1,716 @@
+#!/usr/bin/env node
+import {isCoreOwned, dispatchTargets} from './hook_targets.mjs';
+import { pythonCandidates, isPythonLauncherStub } from './python_runtime.mjs';
+import { workspaceFromSources, resolveTarget } from './hook_workspace.mjs';
+let workspace = null;
+/**
+ * hallucination_guard.mjs — PostToolUse 호스트 강제 할루시네이션 가드
+ * "보고서" / "검토해줘" 트리거가 포함된 모든 쓰기 후 무조건 실행을 목표로 한다.
+ *
+ * 정직한 동작 규약 (docs/GAPS.md 참고):
+ * - 이 훅은 PostToolUse다. 파일이 이미 디스크에 쓰인 뒤 검증하므로 차단은 "사후 게이트"다 —
+ *   호스트가 exit 1 을 받아 다음 턴에서 수정을 강제하는 방식이다. 이미 쓰인 파일을 지우지 않는다.
+ * - 실제 차단은 호스트가 hooks.json 의 failurePolicy: FAIL_CLOSED 로 exit 1 을 해석할 때만 작동한다.
+ * - Python 또는 검증 의존성이 없으면 미확인으로 차단한다.
+ * - 스킵 경로: .md/.html/.txt 외 확장자, 호스트 미훅 경로, 키워드 없는 비보고서 쓰기.
+ *
+ * stdin 규약: 1.5초 데드라인 비동기 읽기 (Linux/Windows 파이프 호환 — fstat.size 미사용).
+ */
+import crypto from 'node:crypto';
+import fs from 'fs';
+import os from 'node:os';
+import path from 'path';
+import { spawnSync } from 'child_process';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { stdin } from 'node:process';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+// ---------------------------------------------------------------------------
+// 입력 수집 (evidence_guard.mjs 와 동일 규약 — 소스별 독립 파싱)
+// ---------------------------------------------------------------------------
+
+// 완성된 JSON 은 조기 리졸브로 바로 끝나므로 상한은 호스트가 늦게 보낼 때만 쓰인다.
+// 50ms 일 때 늦게 온 입력을 버리고 통과(fail-open)시켜 1500ms 로 되돌렸다.
+const STDIN_WAIT_MS = 1500;
+
+function readStdin(limitMs = STDIN_WAIT_MS) {
+	return new Promise((resolve) => {
+		if (stdin.isTTY) {
+			resolve('');
+			return;
+		}
+		const chunks = [];
+		let settled = false;
+		const finish = (value) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			try { stdin.pause(); } catch {}
+			stdin.removeAllListeners();
+			resolve(value);
+		};
+		const timer = setTimeout(() => finish(Buffer.concat(chunks).toString('utf8')), limitMs);
+		if (typeof timer.unref === 'function') timer.unref();
+		stdin.on('data', (chunk) => {
+			chunks.push(chunk);
+			const acc = Buffer.concat(chunks).toString('utf8').trim();
+			if ((acc.startsWith('{') && acc.endsWith('}')) || (acc.startsWith('[') && acc.endsWith(']'))) {
+				try {
+					JSON.parse(acc);
+					finish(acc);
+				} catch {}
+			}
+		});
+		stdin.on('end', () => finish(Buffer.concat(chunks).toString('utf8')));
+		stdin.on('error', () => finish(''));
+	});
+}
+
+function tryParseJson(text) {
+	if (!text) return undefined;
+	const t = text.trim();
+	if (!t.startsWith('{') && !t.startsWith('[')) return undefined;
+	try {
+		return JSON.parse(t);
+	} catch {
+		return undefined;
+	}
+}
+
+async function collectSources() {
+	const sources = [];
+	const push = (text, label) => {
+		if (text) sources.push({ text, parsed: tryParseJson(text), label });
+	};
+	for (const k of ['ANTIGRAVITY_TOOL_INPUT', 'TOOL_INPUT', 'ANTIGRAVITY_TARGET_FILE', 'TARGET_FILE']) {
+		if (process.env[k]) push(process.env[k], `env:${k}`);
+	}
+	push(await readStdin(STDIN_WAIT_MS), 'stdin');
+	for (const arg of process.argv.slice(2)) push(arg, 'argv');
+	return sources;
+}
+
+// ---------------------------------------------------------------------------
+// 대상 추정: JSON 경로 키 > 리다이렉트/유니코드 경로 정규식 > argv 존재 검사
+// ---------------------------------------------------------------------------
+
+const WRITE_OR_CMD_TOOL_RE = /^(write_to_file|replace_file_content|multi_replace_file_content|run_command|WriteToFile|ReplaceFileContent|MultiReplaceFileContent|RunCommand|write_file|WriteFile|edit_file|EditFile|Write|Edit|MultiEdit|SearchReplace|StrReplace|Bash|bash|Shell|shell|execute_command)$/i;
+const TARGET_KEY_RE = /^(file_path|filepath|path|target|target_file|targetfile|target_path|targetpath|output|file|filename)$/i;
+// \S 기반 — 한글/공백 파일명도 매칭 (구버전 [\w\-\.] 은 ASCII 한정으로 한글 보고서를 놓쳤다)
+const PATH_LIKE_RE = /([^\s"'`<>|;&]+[\/\\][^\s"'`<>|;&]+\.(?:md|html|txt|json))/i;
+const REDIRECT_RE = /(?:>|>>)\s*([^\s|&;]+(?:\.(?:md|html|txt|json)))/i;
+const ARGV_REPORT_RE = /\.(md|html|txt)$/;
+
+function unquoteTranscriptVal(val) {
+	if (typeof val !== 'string') return val;
+	const t = val.trim();
+	if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) {
+		try {
+			const parsed = JSON.parse(t);
+			if (typeof parsed === 'string') return parsed;
+		} catch {
+			return t.slice(1, -1);
+		}
+	}
+	return val;
+}
+
+function resolveTranscriptPaths(payloadOrPath) {
+	if (typeof payloadOrPath === 'string') {
+		return resolveTranscriptPaths({ transcriptPath: payloadOrPath });
+	}
+	if (!payloadOrPath || typeof payloadOrPath !== 'object') return [];
+	const candidates = [];
+	const add = (p) => {
+		if (typeof p === 'string' && p.trim() && !candidates.includes(p.trim())) {
+			candidates.push(p.trim());
+		}
+	};
+	const tp = payloadOrPath.transcriptPath || payloadOrPath.transcript_path || '';
+	if (typeof tp === 'string' && tp.trim()) {
+		add(tp);
+		if (/transcript\.jsonl$/i.test(tp) && !/transcript_full\.jsonl$/i.test(tp)) {
+			add(tp.replace(/transcript\.jsonl$/i, 'transcript_full.jsonl'));
+		} else if (/transcript_full\.jsonl$/i.test(tp)) {
+			add(tp.replace(/transcript_full\.jsonl$/i, 'transcript.jsonl'));
+		}
+	}
+	const adp = payloadOrPath.artifactDirectoryPath || payloadOrPath.artifact_directory_path || '';
+	if (typeof adp === 'string' && adp.trim()) {
+		add(path.join(adp, '.system_generated', 'logs', 'transcript_full.jsonl'));
+		add(path.join(adp, '.system_generated', 'logs', 'transcript.jsonl'));
+		add(path.join(adp, 'transcript_full.jsonl'));
+		add(path.join(adp, 'transcript.jsonl'));
+	}
+	return candidates.filter((p) => {
+		try {
+			return fs.existsSync(p) && fs.statSync(p).isFile();
+		} catch {
+			return false;
+		}
+	});
+}
+
+function extractToolDataFromCall(tc) {
+	if (!tc || typeof tc !== 'object') return null;
+	const toolName = unquoteTranscriptVal(tc.name || tc.tool_name || tc.toolName || tc.function?.name || '');
+	if (toolName && !WRITE_OR_CMD_TOOL_RE.test(toolName)) return null;
+	let rawArgs = tc.args ?? tc.arguments ?? tc.input ?? tc.parameters ?? tc.function?.arguments ?? tc;
+	if (typeof rawArgs === 'string') {
+		rawArgs = tryParseJson(unquoteTranscriptVal(rawArgs)) ?? tryParseJson(rawArgs);
+	}
+	if (!rawArgs || typeof rawArgs !== 'object') return null;
+
+	const getStr = (...keys) => {
+		for (const k of keys) {
+			if (typeof rawArgs[k] === 'string' && rawArgs[k]) {
+				return unquoteTranscriptVal(rawArgs[k]);
+			}
+		}
+		return '';
+	};
+
+	let targetFile = getStr('TargetFile', 'target_file', 'file_path', 'filepath', 'Path', 'path', 'target', 'target_path', 'targetpath', 'output', 'file', 'filename');
+	const commandLine = getStr('CommandLine', 'command_line', 'command', 'cmd', 'script');
+	let codeContent = getStr('CodeContent', 'code_content', 'ReplacementContent', 'replacement_content', 'Content', 'content', 'Replacement', 'replacement', 'new_string', 'text');
+	if (!codeContent && rawArgs.ReplacementChunks !== undefined) {
+		let chunks = rawArgs.ReplacementChunks;
+		if (typeof chunks === 'string') {
+			chunks = tryParseJson(unquoteTranscriptVal(chunks)) ?? tryParseJson(chunks);
+		}
+		if (Array.isArray(chunks)) {
+			codeContent = chunks
+				.map((c) => (c && typeof c === 'object' ? unquoteTranscriptVal(c.ReplacementContent || c.replacement_content || c.content || '') : ''))
+				.filter(Boolean)
+				.join('\n');
+		}
+	}
+	if (!targetFile && commandLine) {
+		const red = commandLine.match(REDIRECT_RE);
+		if (red) targetFile = red[1];
+		else {
+			const m = commandLine.match(PATH_LIKE_RE);
+			if (m) targetFile = m[1];
+		}
+	}
+	if (!targetFile && !commandLine && !codeContent) return null;
+	return { toolName, targetFile, codeContent, commandLine };
+}
+
+function extractTargetFromNode(node, out) {
+	if (Array.isArray(node)) {
+		for (const item of node) extractTargetFromNode(item, out);
+		return;
+	}
+	if (!node || typeof node !== 'object') return;
+	for (const [key, value] of Object.entries(node)) {
+		if (typeof value === 'string' && value) {
+			if (key === 'Target' && ('Path' in node || 'Replacement' in node)) continue;
+			if (TARGET_KEY_RE.test(key)) out.push({ value, isCommand: false });
+			else if (/^(command|cmd|command_line|commandline|script|args)$/i.test(key)) out.push({ value, isCommand: true }); // bash 리다이렉트 대상
+		} else if (value && typeof value === 'object') {
+			extractTargetFromNode(value, out);
+		}
+	}
+}
+
+// 마지막 줄이 32KB 창보다 길면(큰 쓰기 직후) 창 안에 완결된 줄이 없어 0줄이 된다.
+// 그때만 예전 상한(512KB)으로 한 번 더 읽는다.
+const TAIL_FALLBACK_BYTES = 512 * 1024;
+
+function readTailLines(filePath, maxLines = 5, maxBytes = 32 * 1024) {
+	const stat = fs.statSync(filePath);
+	let text;
+	if (stat.size <= maxBytes) {
+		text = fs.readFileSync(filePath, 'utf8');
+	} else {
+		const fd = fs.openSync(filePath, 'r');
+		let complete = true;
+		try {
+			const buf = Buffer.allocUnsafe(maxBytes);
+			fs.readSync(fd, buf, 0, maxBytes, stat.size - maxBytes);
+			const nlIdx = buf.indexOf(0x0a);
+			complete = nlIdx >= 0 && nlIdx < maxBytes - 1;
+			text = (nlIdx >= 0 ? buf.subarray(nlIdx + 1) : buf).toString('utf8');
+		} finally {
+			fs.closeSync(fd);
+		}
+		if (!complete && maxBytes < TAIL_FALLBACK_BYTES) return readTailLines(filePath, maxLines, TAIL_FALLBACK_BYTES);
+	}
+	return text.split(/\r?\n/).filter((l) => l.trim().length > 0).slice(-maxLines).reverse();
+}
+
+function extractFromTranscript(payloadOrPath) {
+	const paths = resolveTranscriptPaths(payloadOrPath);
+	const targetStepIdx =
+		payloadOrPath && typeof payloadOrPath === 'object'
+			? typeof payloadOrPath.stepIdx === 'number'
+				? payloadOrPath.stepIdx
+				: typeof payloadOrPath.step_index === 'number'
+					? payloadOrPath.step_index
+					: undefined
+			: undefined;
+
+	for (const tp of paths) {
+		try {
+			const lines = readTailLines(tp, 5);
+			const parsedSteps = [];
+			let hasTruncatedToolCalls = false;
+			for (const line of lines) {
+				const step = tryParseJson(line);
+				if (!step || typeof step !== 'object') continue;
+				if (Array.isArray(step.truncated_fields) && step.truncated_fields.includes('tool_calls')) {
+					hasTruncatedToolCalls = true;
+				}
+				parsedSteps.push({ step, line });
+			}
+			if (hasTruncatedToolCalls && paths.some((p) => p !== tp && /transcript_full\.jsonl$/i.test(p))) {
+				continue;
+			}
+
+			let matchedToolStep = false;
+			const searchSteps = (respectStepIdx) => {
+				for (const { step, line } of parsedSteps) {
+					const stepIdxVal = typeof step.step_index === 'number' ? step.step_index : typeof step.stepIdx === 'number' ? step.stepIdx : undefined;
+					if (respectStepIdx && targetStepIdx !== undefined && stepIdxVal !== undefined && stepIdxVal > targetStepIdx) {
+						continue;
+					}
+					const calls = Array.isArray(step.tool_calls)
+						? step.tool_calls
+						: Array.isArray(step.toolCalls)
+							? step.toolCalls
+							: step.toolCall && typeof step.toolCall === 'object'
+								? [step.toolCall]
+								: [];
+					if (calls.length > 0) {
+						if (respectStepIdx) matchedToolStep = true;
+						if (respectStepIdx && targetStepIdx !== undefined && stepIdxVal !== undefined && targetStepIdx > stepIdxVal) {
+							const callOffset = targetStepIdx - stepIdxVal - 1;
+							if (callOffset >= 0 && callOffset < calls.length) {
+								const data = extractToolDataFromCall(calls[callOffset]);
+								return data && data.targetFile ? data : null;
+							}
+						}
+						for (let i = calls.length - 1; i >= 0; i -= 1) {
+							const data = extractToolDataFromCall(calls[i]);
+							if (data && data.targetFile) return data;
+						}
+						return null;
+					}
+					const directData = extractToolDataFromCall(step);
+					if (directData && directData.targetFile) return directData;
+					if (WRITE_OR_CMD_TOOL_RE.test(line)) {
+						const found = [];
+						extractTargetFromNode(step, found);
+						for (const { value, isCommand } of found) {
+							const u = unquoteTranscriptVal(value);
+							if (!isCommand && u) return { toolName: '', targetFile: u, codeContent: '', commandLine: '' };
+							if (isCommand && u) {
+								const red = u.match(REDIRECT_RE);
+								if (red) return { toolName: 'run_command', targetFile: red[1], codeContent: '', commandLine: u };
+								const m = u.match(PATH_LIKE_RE);
+								if (m) return { toolName: 'run_command', targetFile: m[1], codeContent: '', commandLine: u };
+							}
+						}
+					}
+				}
+				return null;
+			};
+
+			const hit = searchSteps(true) || (!matchedToolStep && targetStepIdx !== undefined ? searchSteps(false) : null);
+			if (hit) return hit;
+		} catch {
+			// continue to next candidate
+		}
+	}
+	return null;
+}
+
+function extractTarget(sources) {
+	const env = process.env.ANTIGRAVITY_TARGET_FILE || process.env.TARGET_FILE || '';
+	if (env) return env;
+	for (const s of sources) {
+		if (s.parsed !== undefined) {
+			if (s.parsed?.toolCall?.args?.TargetFile) return unquoteTranscriptVal(String(s.parsed.toolCall.args.TargetFile));
+			const found = [];
+			extractTargetFromNode(s.parsed, found);
+			for (const { value, isCommand } of found) {
+				const u = unquoteTranscriptVal(value);
+				if (!isCommand) return u; // file_path/target/output 는 그대로 대상
+				// command 값은 리다이렉트/경로 정규식으로 재추출
+				const red = u.match(REDIRECT_RE);
+				if (red) return red[1];
+				const m = u.match(PATH_LIKE_RE);
+				if (m) return m[1];
+			}
+			if (
+				s.parsed &&
+				typeof s.parsed === 'object' &&
+				(s.parsed.transcriptPath || s.parsed.transcript_path || s.parsed.artifactDirectoryPath || s.parsed.artifact_directory_path)
+			) {
+				const fromTranscript = extractFromTranscript(s.parsed);
+				if (fromTranscript && fromTranscript.targetFile) return fromTranscript.targetFile;
+			}
+		}
+	}
+	for (const s of sources) {
+		if (s.parsed !== undefined) continue;
+		const red = s.text.match(REDIRECT_RE);
+		if (red) return red[1];
+		const m = s.text.match(PATH_LIKE_RE);
+		if (m) return m[1];
+	}
+	for (const arg of process.argv.slice(2)) {
+		if (ARGV_REPORT_RE.test(arg) && fs.existsSync(arg)) return arg;
+	}
+	return '';
+}
+
+// 트리거는 키워드/경로힌트/본문 스니핑 3계층. 영어 일반 단어(summary,
+// findings)는 본문 키워드에서 빼고 경로 힌트로만 쓴다 — 일반 개발 노트가
+// 금지문구 스캐너까지 몰려 차단되는 과잉 트리거를 막는다.
+const GUARD_KEYWORD_RE = /보고서|감정서|소견서|의견서|진단서|확인서|분석서|결과서|검토해줘|검증해줘|검증|할루시네이션|할루체크|팩트체크|거짓말검사|사실확인|무결성검사|verify|\/verify|\/할루체크|\/검증|법적.*검토|요약해줘|기록해줘|\/요약|\/기록/i;
+const REPORT_PATH_HINT_RE = /report|보고서|감정서|소견서|의견서|진단서|확인서|분석서|결과서|draft|초안|analysis|opinion|summary|findings|notes|요약|기록/i;
+const NON_REPORT_DOC_RE = /매뉴얼|가이드|튜토리얼|교재|핸드북|치트시트|강의|강좌|안내서|설명서|manual|guide|tutorial|handbook|cheatsheet|playbook|reference|readme/i;
+const EXPLICIT_REPORT_NAME_RE = /보고서|감정서|소견서|의견서|진단서|확인서|분석서|결과서|타임라인|timeline|(?:^|[-_])(?:report|findings|opinion)(?:[-_\.]|$)/i;
+const READ_CAP_BYTES = 2 * 1024 * 1024; // shouldGuard 내용 훑기 상한
+const TAIL_SAMPLE_BYTES = 512 * 1024; // 대용량 파일 후미 샘플 (후미 배치 우회 방지)
+
+function readSamples(targetFile) {
+	// 앞 2MB + 뒤 512KB 양단 샘플. 2MB 초과 파일은 뒤쪽 해시가 스니핑
+	// 사각이 되는 것을 막는다. UTF-8 경계 절단은 라인 시작까지 되돌린다.
+	const st = fs.statSync(targetFile);
+	const headLen = Math.min(READ_CAP_BYTES, st.size);
+	const fd = fs.openSync(targetFile, 'r');
+	const head = Buffer.alloc(headLen);
+	fs.readSync(fd, head, 0, headLen, 0);
+	let tail = null;
+	if (st.size > headLen) {
+		const tailLen = Math.min(TAIL_SAMPLE_BYTES, st.size - headLen);
+		tail = Buffer.alloc(tailLen);
+		fs.readSync(fd, tail, 0, tailLen, st.size - tailLen);
+		let start = 0;
+		// tail 앞단이 잘린 멀티바이트면 첫 개행 이후부터 사용
+		const nl = tail.indexOf(0x0a);
+		if (nl > 0) start = nl + 1;
+		tail = tail.subarray(start);
+	}
+	fs.closeSync(fd);
+	return head.toString('utf-8') + (tail ? tail.toString('utf-8') : '');
+}
+
+function isPluginInternalDoc(targetFile) {
+	try {
+		const abs = path.resolve(targetFile);
+		for (const pRoot of [path.resolve(root)]) {
+			if (!abs.startsWith(pRoot + path.sep)) continue;
+			const rel = path.relative(pRoot, abs).replace(/\\/g, '/');
+			if (/^(AGENTS\.md|GEMINI\.md|RULES\.md|_entry\.md|README\.md|CLAUDE\.md|CHARTER\.md|NOTICE|rules\/|docs\/|skills\/|agents\/|templates\/|contracts\/|enforced\/)/.test(rel)) {
+				return true;
+			}
+		}
+		return false;
+	} catch {
+		return false;
+	}
+}
+
+function isAgentInternalFile(targetFile) {
+    if (isCoreOwned(targetFile)) return true;
+    return Boolean(workspace && ['pins.md', 'ulw-scope.md', 'audit_trail.jsonl'].some(name => path.resolve(targetFile) === path.join(workspace, '.lazyneon-workspace', name)));
+}
+
+function shouldGuard(targetFile, rawTexts) {
+	if (isPluginInternalDoc(targetFile) || isAgentInternalFile(targetFile)) return false;
+	// 원본 자료 폴더(evidence/증거/자료/원본/sources/첨부) 안의 비보고서 파일은 근거 원본이다. analysis/분석 폴더는 보고서를 두는 곳이라 제외하지 않는다.
+	const RAW_SOURCE_DIRS = ['evidence', '증거', '자료', '원본', 'sources', 'attachments', '첨부', 'case'];
+	if (RAW_SOURCE_DIRS.includes(path.basename(path.dirname(path.resolve(targetFile)))) && !EXPLICIT_REPORT_NAME_RE.test(path.basename(targetFile)) && !/보고서|초안|draft|report/i.test(path.basename(targetFile))) return false;
+	const keywordHit = GUARD_KEYWORD_RE.test(rawTexts.join('\n'));
+	const reportExt = /\.(md|html|txt)$/i.test(targetFile);
+	// 경로 힌트는 basename에만 적용 — 디렉터리명/부분문자열 오탐 방지.
+	// 교육 매뉴얼/가이드(예: iOS_포렌식_판독_매뉴얼.md) 등 일반 참조 문서는
+	// 대화나 본문에 '보고서'/'해시' 단어가 있더라도 사건 감정서가 아니므로 제외한다.
+	const base = path.basename(targetFile);
+	if (NON_REPORT_DOC_RE.test(base) && !EXPLICIT_REPORT_NAME_RE.test(base)) {
+		return false;
+	}
+	const reportPathHint = /(?:^|[-_])(?:report|summary|findings|notes|draft|analysis|opinion)(?:[-_\.]|$)/i.test(base)
+		|| /보고서|감정서|소견서|의견서|진단서|확인서|분석서|결과서|초안|요약|기록/.test(base);
+	if (keywordHit && reportExt) return true;
+	if (reportExt && sourceCandidates(targetFile).length > 0) return true;
+	if (reportPathHint && reportExt) return true;
+	if (reportExt && fs.existsSync(targetFile)) {
+		try {
+			const text = readSamples(targetFile);
+			// 본문 폴백: 포렌식 기술 패턴 조합 시 발동.
+			// 1) SHA/MD5 라벨이 붙은 64hex 해시가 있으면서 포렌식 마커(감정/
+			//    증거/사건/포렌식/타임스탬프)도 함께 있을 때만 발동 — 짧은
+			//    "요약" 파일에 해시를 끼워 넣는 우회는 차단하고, 릴리스 체크섬
+			//    노트(해시만 있음)는 발동하지 않는다.
+			const hasLabeledHash = /(?:SHA-?256|sha256)\s*[:=]?\s*[a-fA-F0-9]{64}/i.test(text);
+			const hasForensicMarker = /감정|증거|사건|포렌식|타임스탬프|timestamp/i.test(text);
+			if (hasLabeledHash && hasForensicMarker) return true;
+			if (text.length > 200) {
+				const forensicMarkers = [
+					/SHA-?256|MD5/i.test(text),
+					/감정|증거|사건|포렌식|타임스탬프|timestamp/i.test(text),
+				];
+				if (forensicMarkers.filter(Boolean).length >= 2) return true;
+				if (text.length > 500 && /(사건|감정|해시|SHA-256|증거)/.test(text)) return true;
+			}
+		} catch {}
+	}
+	return false;
+}
+
+function ledgerCandidate(targetFile) {
+	const dir = path.dirname(path.resolve(targetFile));
+	const candidates = [
+		join(dir, 'claim-ledger.md'),
+		join(dir, 'claim_ledger.md'),
+		join(workspace || dir, 'claim-ledger.md'),
+		join(workspace || dir, 'claim_ledger.md'),
+	];
+	return candidates.find((p) => fs.existsSync(p));
+}
+
+// evidence 자동 탐색: 보고서 디렉터리·현재 작업 디렉터리 우선, 없을 때만(플러그인 내부 문서에 한해) 플러그인 루트 폴백
+function evidenceCandidates(targetFile) {
+	const absTarget = path.resolve(targetFile);
+	const dir = path.dirname(absTarget);
+	const candidates = [join(dir, '.lazyneon-workspace', 'audit_trail.jsonl')];
+	if (workspace) candidates.push(join(workspace, '.lazyneon-workspace', 'audit_trail.jsonl'));
+    if (workspace) for (const folder of [workspace, join(workspace,'custody'), join(workspace,'.lazyneon-workspace')]) {
+        let names=[];try {names=fs.readdirSync(folder);}catch{}
+        for(const name of names.filter(n=>n.endsWith('.json'))) {
+            const file=join(folder,name);
+            try {
+                const doc=JSON.parse(fs.readFileSync(file,'utf8'));
+                if(doc.manifest_version===1 || doc.tool==='case_mode.mjs init' || doc.processing_receipt || (doc.source && doc.status && doc.artifacts)) candidates.push(file);
+            } catch {}
+        }
+    }
+	return [...new Set(candidates)].filter(p => fs.existsSync(p));
+}
+
+// 원본 자료 자동 탐색: 보고서 옆 자료 폴더(카톡·녹취·OCR 텍스트, 첨부 파일, 분석 산출물). 인용·첨부 대조 근거다.
+// 'case': Windows QA(2026-11-02)에서 원본을 case\ 에 두었는데 자동 검증이 원본을 못 찾았다.
+const SOURCE_DIR_NAMES = ['evidence', '증거', '자료', '원본', 'sources', 'materials', 'attachments', '첨부', 'analysis', '분석', 'case'];
+function sourceCandidates(targetFile) {
+	const dir = path.dirname(path.resolve(targetFile));
+    const result = [dir, workspace].filter(Boolean).flatMap(base=>SOURCE_DIR_NAMES.map(n=>join(base,n))).filter(p=>fs.existsSync(p)&&fs.statSync(p).isDirectory());
+    for(const candidate of evidenceCandidates(targetFile)) {
+        try {
+            const doc=JSON.parse(fs.readFileSync(candidate,'utf8'));
+            if(doc.manifest_version!==1 && doc.tool!=='case_mode.mjs init') continue;
+            const base=path.resolve(path.dirname(candidate),doc.root||'.');
+            for(const entry of doc.files||[]) {
+                const file=path.resolve(base,entry.path);
+                if(file!==path.resolve(targetFile) && fs.existsSync(file) && fs.statSync(file).isFile()) result.push(file);
+            }
+        } catch {}
+    }
+    return [...new Set(result)];
+}
+
+// timeline 자동 탐색: 보고서 옆/작업 디렉터리의 timeline json — 시각 grounding.
+// 여러 개 있으면 보고서와 가장 가까운(같은 디렉터리) 것부터 전달한다.
+function timelineCandidates(targetFile) {
+	const dir = path.dirname(path.resolve(targetFile));
+	const candidates = [
+		join(dir, 'timeline.json'),
+		join(dir, 'timeline_events.json'),
+		join(dir, 'events.json'),
+		join(workspace || dir, 'timeline.json'),
+		join(workspace || dir, 'timeline_events.json'),
+		join(workspace || dir, 'events.json'),
+	];
+	return candidates.find((p) => fs.existsSync(p));
+}
+
+// Python 탐색: OS별 최적 순서 및 Windows Store alias 오탐 배제
+const PYTHON_CANDIDATES = pythonCandidates(root);
+
+// 호스트 훅 타임아웃(hooks.json 30초)보다 짧게 잡아, 검증이 길어져도 호스트가 프로세스를 죽여
+// stdout JSON 없이 끝나는 상황을 막는다. 타임아웃은 "검증 미완료"이며 FAIL_CLOSED(exit 1)다 —
+// 호스트 세션의 긴 보고서 + Kiwi 형태소 그라운딩이 30초를 넘는 사례 대응.
+const VERIFY_TIMEOUT_MS = Number.parseInt(process.env.LAZYNEON_WS_VERIFY_TIMEOUT_MS || '', 10) || 25000;
+
+function runVerify(args) {
+	const attempts = [];
+	for (const { cmd, pre } of PYTHON_CANDIDATES) {
+		const res = spawnSync(cmd, [...pre, ...args], { cwd: root, encoding: 'utf-8', windowsHide: true, timeout: VERIFY_TIMEOUT_MS });
+		if (res.error) {
+			if (res.error.code === 'ENOENT') {
+				attempts.push(`${cmd}: not found`);
+				continue;
+			}
+			if (res.error.code === 'ETIMEDOUT') {
+				return { res, cmd, spawnError: false, timedOut: true, attempts };
+			}
+			return { res, cmd, spawnError: true, attempts };
+		}
+		if (isPythonLauncherStub(res)) {
+			// Windows Store app-execution alias — 진짜 인터프리터가 아니다
+			attempts.push(`${cmd}: store alias`);
+			continue;
+		}
+		return { res, cmd, spawnError: false, attempts };
+	}
+	return { res: null, cmd: null, spawnError: false, attempts };
+}
+
+function notChecked(detail) {
+    const reason = `[미확인] NOT_CHECKED: ${detail} — 검증 완료로 제출할 수 없습니다.`;
+    console.error(reason);
+    console.log(JSON.stringify({decision: 'block', status: 'NOT_CHECKED', reason}));
+    process.exit(1);
+}
+
+async function main() {
+	const sources = await collectSources();
+	workspace = workspaceFromSources(sources);
+	dispatchTargets(sources);
+	const rawTexts = sources.map((s) => s.text);
+	let targetFile = resolveTarget(extractTarget(sources), workspace);
+	if (targetFile && isCoreOwned(targetFile)) { console.log(JSON.stringify({status:'NOT_APPLICABLE'})); process.exit(0); }
+
+	// Fast-path: if targetFile is already resolved and is not a report extension (.md/.html/.txt), exit immediately
+	if (targetFile && !/\.(md|html|txt)$/i.test(targetFile)) {
+		process.stdout.write(JSON.stringify({status:'NOT_APPLICABLE'})+'\n');
+		process.exit(0);
+	}
+
+	for (const s of sources) {
+		if (
+			s.parsed &&
+			typeof s.parsed === 'object' &&
+			(s.parsed.transcriptPath || s.parsed.transcript_path || s.parsed.artifactDirectoryPath || s.parsed.artifact_directory_path)
+		) {
+			const fromTranscript = extractFromTranscript(s.parsed);
+			if (fromTranscript) {
+				if (!targetFile && fromTranscript.targetFile) targetFile = resolveTarget(fromTranscript.targetFile, workspace);
+				if (fromTranscript.targetFile) rawTexts.push(fromTranscript.targetFile);
+				if (fromTranscript.codeContent) rawTexts.push(fromTranscript.codeContent);
+				if (fromTranscript.commandLine) rawTexts.push(fromTranscript.commandLine);
+			}
+		}
+	}
+
+	if (!targetFile || isCoreOwned(targetFile) || !/\.(md|html|txt)$/i.test(targetFile) || !fs.existsSync(targetFile)) {
+		process.stdout.write(JSON.stringify({status:'NOT_APPLICABLE'})+'\n');
+		process.exit(0); // 가드 대상 없음 — 오탐 방지
+	}
+	// 메신저 내보내기 원본(카카오톡 PC/모바일)은 보고서가 아니라 증거다. 실세션(2026-11-01): 원본 대화 파일을
+	// 보고서로 검사해 '김민수·금요일'을 증거에 없는 용어라고 경고했다.
+	if (/\.txt$/i.test(targetFile)) {
+		try {
+			const head = fs.readFileSync(targetFile, 'utf8').slice(0, 2000);
+			if (/님과 카카오톡 대화|^\s*\[[^\]\n]{1,20}\]\s*\[(?:오전|오후)\s*\d{1,2}:\d{2}\]/m.test(head)) {
+				process.stdout.write(JSON.stringify({status:'NOT_APPLICABLE'})+'\n');
+				process.exit(0);
+			}
+		} catch {
+			// 읽지 못하면 기존 판정을 따른다
+		}
+	}
+    let artifactHashCheck=false;
+    const artifact=fs.readFileSync(targetFile,'utf8');
+    if(artifact.startsWith('<!-- lazyneon-artifact:')) {
+        const m=artifact.match(/^<!-- lazyneon-artifact:v1 kind=non-report generator=(case_survey|court_evidence_sheet|generate_evidence_doc) sha256=([a-f0-9]{64}) -->\n/);
+        const valid=m&&crypto.createHash('sha256').update(artifact.slice(m[0].length),'utf8').digest('hex')===m[2];
+        if(!valid) {
+            console.log(JSON.stringify({status:'FAIL',decision:'block',reason:'Generated artifact body changed; regenerate or verify as a report'}));
+            process.exit(1);
+        }
+        artifactHashCheck=/(?:[a-f0-9]{64}|(?:MD5|SHA-?1)\s*[:=]?\s*[a-f0-9]{32,40})/i.test(artifact.slice(m[0].length));
+        if(!artifactHashCheck) {console.log(JSON.stringify({status:'NOT_APPLICABLE'}));process.exit(0);}
+    }
+	if (!artifactHashCheck && !shouldGuard(targetFile, rawTexts)) {
+		process.stdout.write(JSON.stringify({status:'NOT_APPLICABLE'})+'\n');
+		process.exit(0);
+	}
+
+	const verifyScript = join(root, 'scripts', 'verify_report.py');
+	if (!fs.existsSync(verifyScript)) notChecked('verifier 스크립트 없음');
+
+	const evidence = evidenceCandidates(targetFile);
+	const ledger = ledgerCandidate(targetFile);
+	const timeline = timelineCandidates(targetFile);
+    const timelineNeeded = !artifactHashCheck && /\b20\d{2}[-/]\d{1,2}[-/]\d{1,2}[ T]\d{1,2}:\d{2}/.test(fs.readFileSync(targetFile,'utf8'));
+	const args = [verifyScript, targetFile, "--json"];
+	if (evidence.length > 0) {
+		args.push('--evidence', ...evidence);
+        if(!artifactHashCheck)args.push('--morph-grounding');
+	}
+    if(artifactHashCheck) args.push('--artifact-hashes-only');
+	if (timeline) {
+		args.push('--timeline', timeline);
+	} else if (timelineNeeded) {
+		// timeline 근거 파일을 못 찾으면 과거 시각 grounding이 스킵된다.
+		// 조용한 사각지대 대신 사용자에게 노출해 수동 제공을 유도한다. 단, 대화·보고서마다 한 번만 알린다
+		// (실세션 2026-11-01: 같은 안내가 저장할 때마다 9번 반복돼 에이전트가 가드 코드를 뒤졌다).
+		const noteKey = crypto.createHash('sha1').update(`${sources.find((s) => s.parsed && s.parsed.conversationId)?.parsed.conversationId || ''}|${path.resolve(targetFile)}`).digest('hex').slice(0, 16);
+		const noteMark = workspace ? path.join(workspace, '.lazyneon-workspace', `timeline-note-${noteKey}`) : null;
+		if (!noteMark || !fs.existsSync(noteMark)) {
+			try {
+				if (noteMark) {
+					fs.mkdirSync(path.dirname(noteMark), { recursive: true });
+					fs.writeFileSync(noteMark, '');
+				}
+			} catch {
+				// 표시 기록 실패는 안내 자체를 막지 않는다
+			}
+			console.error(`[HALLUCINATION GUARD] timeline 근거 파일 미발견 — 타임라인 grounding 생략. timeline.json이 있다면 보고서와 같은 디렉터리에 두십시오: ${path.dirname(path.resolve(targetFile))}`);
+		}
+	}
+	if (ledger) {
+		args.push('--claim-ledger', ledger);
+	}
+	args.push('--require-sources', '--sources', ...sourceCandidates(targetFile));
+
+	const { res, spawnError, timedOut, attempts } = runVerify(args);
+
+	if (timedOut) {
+		console.error(`[HALLUCINATION GUARD] 검증 미완료 — verify_report.py 가 ${VERIFY_TIMEOUT_MS}ms 안에 끝나지 않았다 (FAIL_CLOSED). "${path.basename(targetFile)}"`);
+		console.error('[HINT] 보고서를 분할하거나 --morph-grounding 없이 수동 검증을 먼저 돌릴 것. 검증이 끝나기 전에는 제출하지 않는다.');
+		console.error(`[CMD] python scripts/verify_report.py "${targetFile}" --evidence <manifest.json|receipt.json|audit_trail.jsonl> --json`);
+		process.stdout.write(JSON.stringify({ decision: 'block', status: 'NOT_CHECKED', code: 'TIMEOUT', reason: `[HALLUCINATION GUARD] 검증 미완료(타임아웃) — ${path.basename(targetFile)}` }) + '\n');
+		process.exit(1);
+	}
+
+	if (res === null) notChecked('python 실행 불가');
+	if (spawnError) notChecked('verifier 실행 오류');
+
+	let verified;
+    try { verified=JSON.parse(res.stdout); } catch {}
+	if (res.status !== 0) {
+        if (!verified || !['FAIL','WARN','PASS'].includes(verified.verdict)) notChecked('verifier crash/dependency failure without verdict');
+        if (verified?.status_codes?.includes('MORPH_UNAVAILABLE') && !verified.errors?.some(e=>!String(e).startsWith('[미확인]'))) {
+            console.error('[HALLUCINATION GUARD] kiwipiepy 엔진 사용 불가');
+            console.error((res.stderr||'')+(res.stdout||''));
+            console.log(JSON.stringify({decision:'block',status:'NOT_CHECKED',code:'MORPH_UNAVAILABLE'}));
+            process.exit(1);
+        }
+		const out = ((res.stderr || '') + '\n' + (res.stdout || '')).toString().trim();
+		console.error(`[HALLUCINATION GUARD] 보고서 검증 FAIL — "${path.basename(targetFile)}" (PostToolUse 사후 게이트, 보고서/검토해줘 트리거)`);
+		console.error(out.slice(0, 3500));
+		console.error('[HINT] 금지문구 제거, 해시는 실파일 검증 매니페스트·성공 receipt·정상 audit chain 근거만 사용, 없으면 미확인/미측정으로 둘 것. 수정 후 재시도.');
+		console.error(`[CMD] python scripts/verify_report.py "${targetFile}" --evidence <manifest.json|receipt.json|audit_trail.jsonl> --json`);
+		process.stdout.write(JSON.stringify({ decision: 'block', status:'FAIL', reason: `[HALLUCINATION GUARD] 보고서 검증 FAIL — ${path.basename(targetFile)}` }) + '\n');
+		process.exit(1);
+	}
+
+	if (!['PASS','WARN'].includes(verified?.verdict) && !/^\[(PASS|WARN)\]/m.test(res.stdout || '')) notChecked('verifier 결과 없음/잘못된 출력');
+
+    if(artifactHashCheck) {console.log(JSON.stringify({status:'NOT_APPLICABLE'}));process.exit(0);}
+	if (res.stdout && (verified?.verdict==='WARN' || res.stdout.includes('[WARN]'))) {
+		console.error(`[HALLUCINATION GUARD] WARN — ${path.basename(targetFile)}: ${res.stdout.slice(0, 3500)}`);
+	}
+	process.stdout.write(JSON.stringify((!timeline && timelineNeeded)?{status:'NOT_CHECKED',code:'TIMELINE_UNAVAILABLE'}:(verified?.verdict==='WARN' || res.stdout.includes('[WARN]'))?{status:'WARN'}:{status:'PASS'})+'\n');
+	process.exit(0);
+}
+
+main();

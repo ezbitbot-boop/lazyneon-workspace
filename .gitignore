@@ -1,0 +1,49 @@
+# Secrets
+.env
+.env.local
+
+# Node / Python / OS artifacts
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Runtime state written by hooks (stop-guard observe log, scope lock)
+.lazyneon-workspace/
+
+# OS specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Output test files
+*.tmp
+*.log
+!test/fixtures/eval/logs/app.log
+scratch/
+timeline_report.html
+infographic_preview.html
+timeline_strip.png
+
+# Generated dependencies / build output
+# korean-law-mcp is a separate repo — cloned on demand by setup_korean_law.mjs
+korean-law-mcp/
+
+# LazyForensic audit trails (per-case, best-effort)
+.lazyneon-workspace/
+audit_trail.jsonl
+
+# Local DFIR binary cache (BYO, not committed)
+tools/bin/
+tools/
+.playwright-mcp/
+
+*.pii-vault.json
+
+# Private issuer identity and explicit masking exemptions
+/config/issuer.json

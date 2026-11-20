@@ -1,0 +1,88 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_____________ test_setup_entrypoint_records_install_and_failure[0] _____________
+
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-75/test_setup_entrypoint_records_0')
+pip_status = 0
+
+    @pytest.mark.parametrize('pip_status', [0, 17])
+    def test_setup_entrypoint_records_install_and_failure(tmp_path, pip_status):
+        home = tmp_path/'빈 HOME'; home.mkdir()
+        record = tmp_path/'pip.json'
+        # Run the real CLI and real venv creation, replacing only package installation
+        # with a recording boundary (no network, no third-party packages).
+        harness = '''
+    import json, pathlib, runpy, subprocess, sys, venv
+    create = venv.create
+    def offline_create(path, **kwargs):
+        create(path, with_pip=False)
+    venv.create = offline_create
+    record, status, script = sys.argv[1:]
+    sys.argv = [script, '--with', 'imaging', 'morph']
+    # Preserve recording arguments outside the CLI argv.
+    def pip_record(argv, **kwargs):
+        pathlib.Path(record).write_text(json.dumps(argv))
+        return subprocess.CompletedProcess(argv, int(status), '', 'R7_PIP_FAILURE')
+    subprocess.run = pip_record
+    runpy.run_path(script, run_name='__main__')
+    '''
+        result = subprocess.run([sys.executable, '-c', harness, str(record), str(pip_status), str(ROOT/'scripts/setup_forensic_env.py')], env={**os.environ,'HOME':str(home), 'USERPROFILE':str(home)}, text=True, capture_output=True, timeout=30)
+>       assert record.exists(), (result.stdout, result.stderr)
+E       AssertionError: ('venv 생성: <SANDBOX>/tmp/pytest-of-user/pytest-75/test_setup_entrypoint_records_0/빈 HOM...nt_username.py
+E           transcribe-cli: github.com/igitenv/transcribe.cpp 빌드   → 활성화: local_stt.py(transcribe.cpp 엔진)
+E         ', '')
+E       assert False
+E        +  where False = exists()
+E        +    where exists = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-75/test_setup_entrypoint_records_0/pip.json').exists
+
+tests/test_r7_workspace.py:64: AssertionError
+____________ test_setup_entrypoint_records_install_and_failure[17] _____________
+
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-75/test_setup_entrypoint_records_1')
+pip_status = 17
+
+    @pytest.mark.parametrize('pip_status', [0, 17])
+    def test_setup_entrypoint_records_install_and_failure(tmp_path, pip_status):
+        home = tmp_path/'빈 HOME'; home.mkdir()
+        record = tmp_path/'pip.json'
+        # Run the real CLI and real venv creation, replacing only package installation
+        # with a recording boundary (no network, no third-party packages).
+        harness = '''
+    import json, pathlib, runpy, subprocess, sys, venv
+    create = venv.create
+    def offline_create(path, **kwargs):
+        create(path, with_pip=False)
+    venv.create = offline_create
+    record, status, script = sys.argv[1:]
+    sys.argv = [script, '--with', 'imaging', 'morph']
+    # Preserve recording arguments outside the CLI argv.
+    def pip_record(argv, **kwargs):
+        pathlib.Path(record).write_text(json.dumps(argv))
+        return subprocess.CompletedProcess(argv, int(status), '', 'R7_PIP_FAILURE')
+    subprocess.run = pip_record
+    runpy.run_path(script, run_name='__main__')
+    '''
+        result = subprocess.run([sys.executable, '-c', harness, str(record), str(pip_status), str(ROOT/'scripts/setup_forensic_env.py')], env={**os.environ,'HOME':str(home), 'USERPROFILE':str(home)}, text=True, capture_output=True, timeout=30)
+>       assert record.exists(), (result.stdout, result.stderr)
+E       AssertionError: ('venv 생성: <SANDBOX>/tmp/pytest-of-user/pytest-75/test_setup_entrypoint_records_1/빈 HOM...nt_username.py
+E           transcribe-cli: github.com/igitenv/transcribe.cpp 빌드   → 활성화: local_stt.py(transcribe.cpp 엔진)
+E         ', '')
+E       assert False
+E        +  where False = exists()
+E        +    where exists = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-75/test_setup_entrypoint_records_1/pip.json').exists
+
+tests/test_r7_workspace.py:64: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_r7_workspace.py::test_setup_entrypoint_records_install_and_failure[0] - AssertionError: ('venv 생성: <SANDBOX>/tmp/pytest-of-user/pytest-75/test_setup_entrypoint_records_0/빈 HOM...nt_username.py
+    transcribe-cli: github.com/igitenv/transcribe.cpp 빌드   → 활성화: local_stt.py(transcribe.cpp 엔진)
+  ', '')
+assert False
+ +  where False = exists()
+ +    where exists = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-75/test_setup_entrypoint_records_0/pip.json').exists
+FAILED tests/test_r7_workspace.py::test_setup_entrypoint_records_install_and_failure[17] - AssertionError: ('venv 생성: <SANDBOX>/tmp/pytest-of-user/pytest-75/test_setup_entrypoint_records_1/빈 HOM...nt_username.py
+    transcribe-cli: github.com/igitenv/transcribe.cpp 빌드   → 활성화: local_stt.py(transcribe.cpp 엔진)
+  ', '')
+assert False
+ +  where False = exists()
+ +    where exists = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-75/test_setup_entrypoint_records_1/pip.json').exists
+2 failed in 0.15s

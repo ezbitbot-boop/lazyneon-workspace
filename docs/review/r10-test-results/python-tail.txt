@@ -1,0 +1,5 @@
+........................................................................ [ 93%]
+........................................................................ [ 99%]
+............                               [100%]
+1227 passed, 5 skipped, 17 deselected, 1114 subtests passed in 119.70s (0:01:59)
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

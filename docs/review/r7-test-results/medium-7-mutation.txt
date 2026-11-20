@@ -1,0 +1,41 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________________ test_workspace_payload_pins_and_case_audit __________________
+
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-79/test_workspace_payload_pins_an0')
+
+    def test_workspace_payload_pins_and_case_audit(tmp_path):
+        case = tmp_path / 'case'; case.mkdir()
+        (case / '.lazyneon').mkdir()
+        (case / '.lazyneon/pins.md').write_text('PIN-R3-CASE')
+        payload = {'workspacePaths': [str(case)], 'cwd': str(tmp_path)}
+        assert 'PIN-R3-CASE' not in hook('session_start', payload, ROOT).stdout
+        source = case / 'source.txt'; source.write_text('evidence')
+        payload['toolCall'] = {'name': 'write_to_file', 'args': {'TargetFile': 'source.txt'}}
+        assert hook('evidence_guard', payload, tmp_path).returncode == 0
+        audit = case / '.lazyneon-workspace/audit_trail.jsonl'
+        assert audit.exists()
+        assert not (tmp_path / '.lazyneon-workspace').exists()
+        (case/'sources').mkdir()
+        (case/'sources/source.txt').write_bytes(source.read_bytes())
+        report = case / '감정보고서.md'
+        import hashlib
+        report.write_text('# 감정 보고서\n## 해시 검증\nsource.txt SHA-256: ' + hashlib.sha256(b'evidence').hexdigest())
+        payload['toolCall']['args']['TargetFile'] = str(report)
+        result = hook('hallucination_guard', payload, tmp_path, {'LAZYNEON_WS_PYTHON': sys.executable})
+        assert '근거 없는 해시' not in result.stderr
+        assert '--evidence 미제시' not in result.stderr
+        direct = subprocess.run([sys.executable, str(ROOT/'scripts/verify_report.py'), str(report), '--evidence', str(audit), '--require-sources', '--sources', str(case/'sources'), '--json'], capture_output=True, text=True)
+        assert direct.returncode == 0, direct.stdout
+        assert json.loads(direct.stdout)['verdict'] in ('PASS', 'WARN')
+        from korean_morph_forensic import get_kiwi_instance
+        if get_kiwi_instance() is None:
+>           assert result.returncode == 1
+E           AssertionError: assert 0 == 1
+E            +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='').returncode
+
+tests/test_r3_workspace.py:93: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_r3_workspace.py::test_workspace_payload_pins_and_case_audit - AssertionError: assert 0 == 1
+ +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='').returncode
+1 failed in 0.45s

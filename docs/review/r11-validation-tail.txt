@@ -1,0 +1,10 @@
+LAZYNEON_OFFLINE=1 /opt/homebrew/bin/python3.12 -m pytest test/test_case_mode.py tests/test_r6_workspace.py tests/test_r6_oracle_workspace.py tests/test_r7_workspace.py tests/test_r8_workspace.py tests/test_r9_workspace.py tests/test_r10_balancing.py tests/test_r11_workspace.py tests/test_mask_korean_pii.py tests/test_mask_pii_negatives.py tests/test_generate_evidence_doc.py tests/test_processing_receipt.py tests/test_report_evidence_loading.py tests/test_source_grounding.py -q
+
+tests/test_r10_balancing.py::test_r10_bind_mixed
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+608 passed, 5 warnings in 84.80s (0:01:24)
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+Baseline a28c647: 117 failed, 9 passed in 17.96s

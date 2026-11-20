@@ -1,0 +1,27 @@
+................................................s.......s............... [  9%]
+....................s..........................s........................ [ 19%]
+............................................................... [ 27%]
+......................................s................................. [ 36%]
+.......................................... [ 42%]
+........................................................................ [ 51%]
+...................ssFs...................................................... [ 62%]
+........................................................................ [ 71%]
+........................................................................ [ 81%]
+........................................................................ [ 90%]
+......................................................................   [100%]
+=================================== FAILURES ===================================
+_________________ test_parse_hwp5_primary_or_fallback_no_error _________________
+
+hwp5_file = '<SANDBOX>/tmp/pytest-of-user/pytest-9/test_parse_hwp5_primary_or_fal0/anonymized_sample.hwp'
+
+    def test_parse_hwp5_primary_or_fallback_no_error(hwp5_file):
+        """설치된 의존성 그대로 실행 — 어느 경로든 오류 없이 텍스트를 낸다."""
+        result = pkd.parse_hwp_legacy(hwp5_file)
+>       assert "error" not in result
+E       assert 'error' not in {'file_path': '<SANDBOX>/tmp/pytest-of-user/pytest-9/test_parse_hwp5_primary_or_fal0/an... 5.0', 'error': "Failed to parse HWP via OLE fallback: No module named 'olefile' (install hwp-hwpx-parser or olefile)"}
+
+tests/test_hwp5_fixture.py:117: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_hwp5_fixture.py::test_parse_hwp5_primary_or_fallback_no_error - assert 'error' not in {'file_path': '<SANDBOX>/tmp/pytest-of-user/pytest-9/test_parse_hwp5_primary_or_fal0/an... 5.0', 'error': "Failed to parse HWP via OLE fallback: No module named 'olefile' (install hwp-hwpx-parser or olefile)"}
+1 failed, 747 passed, 8 skipped, 1114 subtests passed in 44.51s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

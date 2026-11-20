@@ -1,0 +1,13 @@
+✔ session without optional core files creates no state (46.400833ms)
+✔ core inputs are read without changes or new files (45.728625ms)
+✔ only four domain guards registered; no generic hook (0.363709ms)
+✔ catalog is exactly owner approved; experiments are not discoverable (0.823375ms)
+✔ case hashes detect content changes with isolated policy state (151.0835ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 303.683375

@@ -1,0 +1,521 @@
+FFFFFFFFFFFFF                                                            [100%]
+=================================== FAILURES ===================================
+____________ test_pii_variants_mask_and_vault[010\u200b-1234-5678] _____________
+
+value = '010\u200b-1234-5678'
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-73/test_pii_variants_mask_and_vau0')
+
+    @pytest.mark.parametrize('value', ['010\u200b-1234-5678', '900101−1234567', '110 123 456789', '+82 10-1234-5678', '+82-10-1234-5678', '0082 10 1234 5678', '０１０−１２３４-５６７８', '01０-١٢٣٤-5678'])
+    def test_pii_variants_mask_and_vault(value, tmp_path):
+        masked, stats = pii.mask_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert masked != value and '*' in masked
+        vault = pii.PiiVault(); tokenized, _ = vault.tokenize_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert tokenized.startswith('[PII_') and tokenized.endswith(']')
+        assert vault.detokenize_text(tokenized) == value
+        assert pii_mask.detect_in_text(value)
+        assert pii_mask.mask_text(value) != value
+        assert_private_digits_hidden(value, masked, phone_secret='5678')
+>       assert_private_digits_hidden(value, pii_mask.mask_text(value))
+
+tests/test_r4_workspace.py:86: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '010\u200b-1234-5678', masked = '010\u200b-1234-5678*'
+phone_secret = '1234'
+
+    def assert_private_digits_hidden(value, masked, phone_secret='1234'):
+        # Independent of the production normalizer: no format/control character
+        # can hide leaked middle/account/RRN digits from this assertion.
+        digits = lambda text: ''.join(str(unicodedata.decimal(c)) for c in text if c.isdecimal())
+        secret = '234567' if '900101' in digits(value) else ('456789' if digits(value).startswith('110') else phone_secret)
+>       assert secret not in digits(masked)
+E       AssertionError: assert '1234' not in '01012345678'
+E         
+E         '1234' is contained here:
+E           01012345678
+E         ?    ++++
+
+tests/test_r4_workspace.py:237: AssertionError
+____________ test_pii_variants_mask_and_vault[900101\u22121234567] _____________
+
+value = '900101−1234567'
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-73/test_pii_variants_mask_and_vau1')
+
+    @pytest.mark.parametrize('value', ['010\u200b-1234-5678', '900101−1234567', '110 123 456789', '+82 10-1234-5678', '+82-10-1234-5678', '0082 10 1234 5678', '０１０−１２３４-５６７８', '01０-١٢٣٤-5678'])
+    def test_pii_variants_mask_and_vault(value, tmp_path):
+        masked, stats = pii.mask_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert masked != value and '*' in masked
+        vault = pii.PiiVault(); tokenized, _ = vault.tokenize_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert tokenized.startswith('[PII_') and tokenized.endswith(']')
+        assert vault.detokenize_text(tokenized) == value
+        assert pii_mask.detect_in_text(value)
+        assert pii_mask.mask_text(value) != value
+        assert_private_digits_hidden(value, masked, phone_secret='5678')
+>       assert_private_digits_hidden(value, pii_mask.mask_text(value))
+
+tests/test_r4_workspace.py:86: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '900101−1234567', masked = '900101−1234567*', phone_secret = '1234'
+
+    def assert_private_digits_hidden(value, masked, phone_secret='1234'):
+        # Independent of the production normalizer: no format/control character
+        # can hide leaked middle/account/RRN digits from this assertion.
+        digits = lambda text: ''.join(str(unicodedata.decimal(c)) for c in text if c.isdecimal())
+        secret = '234567' if '900101' in digits(value) else ('456789' if digits(value).startswith('110') else phone_secret)
+>       assert secret not in digits(masked)
+E       AssertionError: assert '234567' not in '9001011234567'
+E         
+E         '234567' is contained here:
+E           9001011234567
+
+tests/test_r4_workspace.py:237: AssertionError
+_______________ test_pii_variants_mask_and_vault[110 123 456789] _______________
+
+value = '110 123 456789'
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-73/test_pii_variants_mask_and_vau2')
+
+    @pytest.mark.parametrize('value', ['010\u200b-1234-5678', '900101−1234567', '110 123 456789', '+82 10-1234-5678', '+82-10-1234-5678', '0082 10 1234 5678', '０１０−１２３４-５６７８', '01０-١٢٣٤-5678'])
+    def test_pii_variants_mask_and_vault(value, tmp_path):
+        masked, stats = pii.mask_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert masked != value and '*' in masked
+        vault = pii.PiiVault(); tokenized, _ = vault.tokenize_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert tokenized.startswith('[PII_') and tokenized.endswith(']')
+        assert vault.detokenize_text(tokenized) == value
+        assert pii_mask.detect_in_text(value)
+        assert pii_mask.mask_text(value) != value
+        assert_private_digits_hidden(value, masked, phone_secret='5678')
+>       assert_private_digits_hidden(value, pii_mask.mask_text(value))
+
+tests/test_r4_workspace.py:86: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '110 123 456789', masked = '110 123 456789*', phone_secret = '1234'
+
+    def assert_private_digits_hidden(value, masked, phone_secret='1234'):
+        # Independent of the production normalizer: no format/control character
+        # can hide leaked middle/account/RRN digits from this assertion.
+        digits = lambda text: ''.join(str(unicodedata.decimal(c)) for c in text if c.isdecimal())
+        secret = '234567' if '900101' in digits(value) else ('456789' if digits(value).startswith('110') else phone_secret)
+>       assert secret not in digits(masked)
+E       AssertionError: assert '456789' not in '110123456789'
+E         
+E         '456789' is contained here:
+E           110123456789
+
+tests/test_r4_workspace.py:237: AssertionError
+______________ test_pii_variants_mask_and_vault[+82 10-1234-5678] ______________
+
+value = '+82 10-1234-5678'
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-73/test_pii_variants_mask_and_vau3')
+
+    @pytest.mark.parametrize('value', ['010\u200b-1234-5678', '900101−1234567', '110 123 456789', '+82 10-1234-5678', '+82-10-1234-5678', '0082 10 1234 5678', '０１０−１２３４-５６７８', '01０-١٢٣٤-5678'])
+    def test_pii_variants_mask_and_vault(value, tmp_path):
+        masked, stats = pii.mask_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert masked != value and '*' in masked
+        vault = pii.PiiVault(); tokenized, _ = vault.tokenize_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert tokenized.startswith('[PII_') and tokenized.endswith(']')
+        assert vault.detokenize_text(tokenized) == value
+        assert pii_mask.detect_in_text(value)
+        assert pii_mask.mask_text(value) != value
+        assert_private_digits_hidden(value, masked, phone_secret='5678')
+>       assert_private_digits_hidden(value, pii_mask.mask_text(value))
+
+tests/test_r4_workspace.py:86: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '+82 10-1234-5678', masked = '+82 10-1234-5678*', phone_secret = '1234'
+
+    def assert_private_digits_hidden(value, masked, phone_secret='1234'):
+        # Independent of the production normalizer: no format/control character
+        # can hide leaked middle/account/RRN digits from this assertion.
+        digits = lambda text: ''.join(str(unicodedata.decimal(c)) for c in text if c.isdecimal())
+        secret = '234567' if '900101' in digits(value) else ('456789' if digits(value).startswith('110') else phone_secret)
+>       assert secret not in digits(masked)
+E       AssertionError: assert '1234' not in '821012345678'
+E         
+E         '1234' is contained here:
+E           821012345678
+E         ?     ++++
+
+tests/test_r4_workspace.py:237: AssertionError
+______________ test_pii_variants_mask_and_vault[+82-10-1234-5678] ______________
+
+value = '+82-10-1234-5678'
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-73/test_pii_variants_mask_and_vau4')
+
+    @pytest.mark.parametrize('value', ['010\u200b-1234-5678', '900101−1234567', '110 123 456789', '+82 10-1234-5678', '+82-10-1234-5678', '0082 10 1234 5678', '０１０−１２３４-５６７８', '01０-١٢٣٤-5678'])
+    def test_pii_variants_mask_and_vault(value, tmp_path):
+        masked, stats = pii.mask_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert masked != value and '*' in masked
+        vault = pii.PiiVault(); tokenized, _ = vault.tokenize_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert tokenized.startswith('[PII_') and tokenized.endswith(']')
+        assert vault.detokenize_text(tokenized) == value
+        assert pii_mask.detect_in_text(value)
+        assert pii_mask.mask_text(value) != value
+        assert_private_digits_hidden(value, masked, phone_secret='5678')
+>       assert_private_digits_hidden(value, pii_mask.mask_text(value))
+
+tests/test_r4_workspace.py:86: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '+82-10-1234-5678', masked = '+82-10-1234-5678*', phone_secret = '1234'
+
+    def assert_private_digits_hidden(value, masked, phone_secret='1234'):
+        # Independent of the production normalizer: no format/control character
+        # can hide leaked middle/account/RRN digits from this assertion.
+        digits = lambda text: ''.join(str(unicodedata.decimal(c)) for c in text if c.isdecimal())
+        secret = '234567' if '900101' in digits(value) else ('456789' if digits(value).startswith('110') else phone_secret)
+>       assert secret not in digits(masked)
+E       AssertionError: assert '1234' not in '821012345678'
+E         
+E         '1234' is contained here:
+E           821012345678
+E         ?     ++++
+
+tests/test_r4_workspace.py:237: AssertionError
+_____________ test_pii_variants_mask_and_vault[0082 10 1234 5678] ______________
+
+value = '0082 10 1234 5678'
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-73/test_pii_variants_mask_and_vau5')
+
+    @pytest.mark.parametrize('value', ['010\u200b-1234-5678', '900101−1234567', '110 123 456789', '+82 10-1234-5678', '+82-10-1234-5678', '0082 10 1234 5678', '０１０−１２３４-５６７８', '01０-١٢٣٤-5678'])
+    def test_pii_variants_mask_and_vault(value, tmp_path):
+        masked, stats = pii.mask_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert masked != value and '*' in masked
+        vault = pii.PiiVault(); tokenized, _ = vault.tokenize_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert tokenized.startswith('[PII_') and tokenized.endswith(']')
+        assert vault.detokenize_text(tokenized) == value
+        assert pii_mask.detect_in_text(value)
+        assert pii_mask.mask_text(value) != value
+        assert_private_digits_hidden(value, masked, phone_secret='5678')
+>       assert_private_digits_hidden(value, pii_mask.mask_text(value))
+
+tests/test_r4_workspace.py:86: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '0082 10 1234 5678', masked = '0082 10 1234 5678*'
+phone_secret = '1234'
+
+    def assert_private_digits_hidden(value, masked, phone_secret='1234'):
+        # Independent of the production normalizer: no format/control character
+        # can hide leaked middle/account/RRN digits from this assertion.
+        digits = lambda text: ''.join(str(unicodedata.decimal(c)) for c in text if c.isdecimal())
+        secret = '234567' if '900101' in digits(value) else ('456789' if digits(value).startswith('110') else phone_secret)
+>       assert secret not in digits(masked)
+E       AssertionError: assert '1234' not in '00821012345678'
+E         
+E         '1234' is contained here:
+E           00821012345678
+E         ?       ++++
+
+tests/test_r4_workspace.py:237: AssertionError
+_ test_pii_variants_mask_and_vault[\uff10\uff11\uff10\u2212\uff11\uff12\uff13\uff14-\uff15\uff16\uff17\uff18] _
+
+value = '０１０−１２３４-５６７８'
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-73/test_pii_variants_mask_and_vau6')
+
+    @pytest.mark.parametrize('value', ['010\u200b-1234-5678', '900101−1234567', '110 123 456789', '+82 10-1234-5678', '+82-10-1234-5678', '0082 10 1234 5678', '０１０−１２３４-５６７８', '01０-١٢٣٤-5678'])
+    def test_pii_variants_mask_and_vault(value, tmp_path):
+        masked, stats = pii.mask_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert masked != value and '*' in masked
+        vault = pii.PiiVault(); tokenized, _ = vault.tokenize_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert tokenized.startswith('[PII_') and tokenized.endswith(']')
+        assert vault.detokenize_text(tokenized) == value
+        assert pii_mask.detect_in_text(value)
+        assert pii_mask.mask_text(value) != value
+        assert_private_digits_hidden(value, masked, phone_secret='5678')
+>       assert_private_digits_hidden(value, pii_mask.mask_text(value))
+
+tests/test_r4_workspace.py:86: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '０１０−１２３４-５６７８', masked = '０１０−１２３４-５６７８*', phone_secret = '1234'
+
+    def assert_private_digits_hidden(value, masked, phone_secret='1234'):
+        # Independent of the production normalizer: no format/control character
+        # can hide leaked middle/account/RRN digits from this assertion.
+        digits = lambda text: ''.join(str(unicodedata.decimal(c)) for c in text if c.isdecimal())
+        secret = '234567' if '900101' in digits(value) else ('456789' if digits(value).startswith('110') else phone_secret)
+>       assert secret not in digits(masked)
+E       AssertionError: assert '1234' not in '01012345678'
+E         
+E         '1234' is contained here:
+E           01012345678
+E         ?    ++++
+
+tests/test_r4_workspace.py:237: AssertionError
+___ test_pii_variants_mask_and_vault[01\uff10-\u0661\u0662\u0663\u0664-5678] ___
+
+value = '01０-١٢٣٤-5678'
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-73/test_pii_variants_mask_and_vau7')
+
+    @pytest.mark.parametrize('value', ['010\u200b-1234-5678', '900101−1234567', '110 123 456789', '+82 10-1234-5678', '+82-10-1234-5678', '0082 10 1234 5678', '０１０−１２３４-５６７８', '01０-١٢٣٤-5678'])
+    def test_pii_variants_mask_and_vault(value, tmp_path):
+        masked, stats = pii.mask_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert masked != value and '*' in masked
+        vault = pii.PiiVault(); tokenized, _ = vault.tokenize_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert tokenized.startswith('[PII_') and tokenized.endswith(']')
+        assert vault.detokenize_text(tokenized) == value
+        assert pii_mask.detect_in_text(value)
+        assert pii_mask.mask_text(value) != value
+        assert_private_digits_hidden(value, masked, phone_secret='5678')
+>       assert_private_digits_hidden(value, pii_mask.mask_text(value))
+
+tests/test_r4_workspace.py:86: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '01０-١٢٣٤-5678', masked = '01０-١٢٣٤-5678*', phone_secret = '1234'
+
+    def assert_private_digits_hidden(value, masked, phone_secret='1234'):
+        # Independent of the production normalizer: no format/control character
+        # can hide leaked middle/account/RRN digits from this assertion.
+        digits = lambda text: ''.join(str(unicodedata.decimal(c)) for c in text if c.isdecimal())
+        secret = '234567' if '900101' in digits(value) else ('456789' if digits(value).startswith('110') else phone_secret)
+>       assert secret not in digits(masked)
+E       AssertionError: assert '1234' not in '01012345678'
+E         
+E         '1234' is contained here:
+E           01012345678
+E         ?    ++++
+
+tests/test_r4_workspace.py:237: AssertionError
+________________ test_spaced_mixed_separators[900101 - 1234567] ________________
+
+value = '900101 - 1234567'
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-73/test_spaced_mixed_separators_90')
+
+    @pytest.mark.parametrize('value', ['900101 - 1234567','010 - 1234 - 5678','+82 10 - 1234 - 5678','９００１０１ − ５２３４５６７','１１ − ２２ − １２３４５６ − ０１'])
+    def test_spaced_mixed_separators(value, tmp_path):
+        masked,_=pii.mask_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert masked!=value and '*' in masked
+        vault=pii.PiiVault(); tokens,_=vault.tokenize_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert tokens.startswith('[PII_') and tokens.endswith(']')
+        assert vault.detokenize_text(tokens)==value
+        assert pii_mask.detect_in_text(value)
+        assert pii_mask.mask_text(value)!=value
+        assert_private_digits_hidden(value, masked, phone_secret='5678')
+>       assert_private_digits_hidden(value, pii_mask.mask_text(value))
+
+tests/test_r4_workspace.py:222: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '900101 - 1234567', masked = '900101 - 1234567*', phone_secret = '1234'
+
+    def assert_private_digits_hidden(value, masked, phone_secret='1234'):
+        # Independent of the production normalizer: no format/control character
+        # can hide leaked middle/account/RRN digits from this assertion.
+        digits = lambda text: ''.join(str(unicodedata.decimal(c)) for c in text if c.isdecimal())
+        secret = '234567' if '900101' in digits(value) else ('456789' if digits(value).startswith('110') else phone_secret)
+>       assert secret not in digits(masked)
+E       AssertionError: assert '234567' not in '9001011234567'
+E         
+E         '234567' is contained here:
+E           9001011234567
+
+tests/test_r4_workspace.py:237: AssertionError
+_______________ test_spaced_mixed_separators[010 - 1234 - 5678] ________________
+
+value = '010 - 1234 - 5678'
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-73/test_spaced_mixed_separators_00')
+
+    @pytest.mark.parametrize('value', ['900101 - 1234567','010 - 1234 - 5678','+82 10 - 1234 - 5678','９００１０１ − ５２３４５６７','１１ − ２２ − １２３４５６ − ０１'])
+    def test_spaced_mixed_separators(value, tmp_path):
+        masked,_=pii.mask_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert masked!=value and '*' in masked
+        vault=pii.PiiVault(); tokens,_=vault.tokenize_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert tokens.startswith('[PII_') and tokens.endswith(']')
+        assert vault.detokenize_text(tokens)==value
+        assert pii_mask.detect_in_text(value)
+        assert pii_mask.mask_text(value)!=value
+        assert_private_digits_hidden(value, masked, phone_secret='5678')
+>       assert_private_digits_hidden(value, pii_mask.mask_text(value))
+
+tests/test_r4_workspace.py:222: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '010 - 1234 - 5678', masked = '010 - 1234 - 5678*'
+phone_secret = '1234'
+
+    def assert_private_digits_hidden(value, masked, phone_secret='1234'):
+        # Independent of the production normalizer: no format/control character
+        # can hide leaked middle/account/RRN digits from this assertion.
+        digits = lambda text: ''.join(str(unicodedata.decimal(c)) for c in text if c.isdecimal())
+        secret = '234567' if '900101' in digits(value) else ('456789' if digits(value).startswith('110') else phone_secret)
+>       assert secret not in digits(masked)
+E       AssertionError: assert '1234' not in '01012345678'
+E         
+E         '1234' is contained here:
+E           01012345678
+E         ?    ++++
+
+tests/test_r4_workspace.py:237: AssertionError
+______________ test_spaced_mixed_separators[+82 10 - 1234 - 5678] ______________
+
+value = '+82 10 - 1234 - 5678'
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-73/test_spaced_mixed_separators__0')
+
+    @pytest.mark.parametrize('value', ['900101 - 1234567','010 - 1234 - 5678','+82 10 - 1234 - 5678','９００１０１ − ５２３４５６７','１１ − ２２ − １２３４５６ − ０１'])
+    def test_spaced_mixed_separators(value, tmp_path):
+        masked,_=pii.mask_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert masked!=value and '*' in masked
+        vault=pii.PiiVault(); tokens,_=vault.tokenize_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert tokens.startswith('[PII_') and tokens.endswith(']')
+        assert vault.detokenize_text(tokens)==value
+        assert pii_mask.detect_in_text(value)
+        assert pii_mask.mask_text(value)!=value
+        assert_private_digits_hidden(value, masked, phone_secret='5678')
+>       assert_private_digits_hidden(value, pii_mask.mask_text(value))
+
+tests/test_r4_workspace.py:222: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '+82 10 - 1234 - 5678', masked = '+82 10 - 1234 - 5678*'
+phone_secret = '1234'
+
+    def assert_private_digits_hidden(value, masked, phone_secret='1234'):
+        # Independent of the production normalizer: no format/control character
+        # can hide leaked middle/account/RRN digits from this assertion.
+        digits = lambda text: ''.join(str(unicodedata.decimal(c)) for c in text if c.isdecimal())
+        secret = '234567' if '900101' in digits(value) else ('456789' if digits(value).startswith('110') else phone_secret)
+>       assert secret not in digits(masked)
+E       AssertionError: assert '1234' not in '821012345678'
+E         
+E         '1234' is contained here:
+E           821012345678
+E         ?     ++++
+
+tests/test_r4_workspace.py:237: AssertionError
+_ test_spaced_mixed_separators[\uff19\uff10\uff10\uff11\uff10\uff11 \u2212 \uff15\uff12\uff13\uff14\uff15\uff16\uff17] _
+
+value = '９００１０１ − ５２３４５６７'
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-73/test_spaced_mixed_separators__1')
+
+    @pytest.mark.parametrize('value', ['900101 - 1234567','010 - 1234 - 5678','+82 10 - 1234 - 5678','９００１０１ − ５２３４５６７','１１ − ２２ − １２３４５６ − ０１'])
+    def test_spaced_mixed_separators(value, tmp_path):
+        masked,_=pii.mask_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert masked!=value and '*' in masked
+        vault=pii.PiiVault(); tokens,_=vault.tokenize_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert tokens.startswith('[PII_') and tokens.endswith(']')
+        assert vault.detokenize_text(tokens)==value
+        assert pii_mask.detect_in_text(value)
+        assert pii_mask.mask_text(value)!=value
+        assert_private_digits_hidden(value, masked, phone_secret='5678')
+>       assert_private_digits_hidden(value, pii_mask.mask_text(value))
+
+tests/test_r4_workspace.py:222: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '９００１０１ − ５２３４５６７', masked = '９００１０１ − ５２３４５６７*', phone_secret = '1234'
+
+    def assert_private_digits_hidden(value, masked, phone_secret='1234'):
+        # Independent of the production normalizer: no format/control character
+        # can hide leaked middle/account/RRN digits from this assertion.
+        digits = lambda text: ''.join(str(unicodedata.decimal(c)) for c in text if c.isdecimal())
+        secret = '234567' if '900101' in digits(value) else ('456789' if digits(value).startswith('110') else phone_secret)
+>       assert secret not in digits(masked)
+E       AssertionError: assert '234567' not in '9001015234567'
+E         
+E         '234567' is contained here:
+E           9001015234567
+
+tests/test_r4_workspace.py:237: AssertionError
+_ test_spaced_mixed_separators[\uff11\uff11 \u2212 \uff12\uff12 \u2212 \uff11\uff12\uff13\uff14\uff15\uff16 \u2212 \uff10\uff11] _
+
+value = '１１ − ２２ − １２３４５６ − ０１'
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-73/test_spaced_mixed_separators__2')
+
+    @pytest.mark.parametrize('value', ['900101 - 1234567','010 - 1234 - 5678','+82 10 - 1234 - 5678','９００１０１ − ５２３４５６７','１１ − ２２ − １２３４５６ − ０１'])
+    def test_spaced_mixed_separators(value, tmp_path):
+        masked,_=pii.mask_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert masked!=value and '*' in masked
+        vault=pii.PiiVault(); tokens,_=vault.tokenize_text(value,pii.ALL_TYPES,mask_suspect_rrn=True)
+        assert tokens.startswith('[PII_') and tokens.endswith(']')
+        assert vault.detokenize_text(tokens)==value
+        assert pii_mask.detect_in_text(value)
+        assert pii_mask.mask_text(value)!=value
+        assert_private_digits_hidden(value, masked, phone_secret='5678')
+>       assert_private_digits_hidden(value, pii_mask.mask_text(value))
+
+tests/test_r4_workspace.py:222: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '１１ − ２２ − １２３４５６ − ０１', masked = '１１ − ２２ − １２３４５６ − ０１*'
+phone_secret = '1234'
+
+    def assert_private_digits_hidden(value, masked, phone_secret='1234'):
+        # Independent of the production normalizer: no format/control character
+        # can hide leaked middle/account/RRN digits from this assertion.
+        digits = lambda text: ''.join(str(unicodedata.decimal(c)) for c in text if c.isdecimal())
+        secret = '234567' if '900101' in digits(value) else ('456789' if digits(value).startswith('110') else phone_secret)
+>       assert secret not in digits(masked)
+E       AssertionError: assert '1234' not in '112212345601'
+E         
+E         '1234' is contained here:
+E           112212345601
+E         ?     ++++
+
+tests/test_r4_workspace.py:237: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_r4_workspace.py::test_pii_variants_mask_and_vault[010\u200b-1234-5678] - AssertionError: assert '1234' not in '01012345678'
+  
+  '1234' is contained here:
+    01012345678
+  ?    ++++
+FAILED tests/test_r4_workspace.py::test_pii_variants_mask_and_vault[900101\u22121234567] - AssertionError: assert '234567' not in '9001011234567'
+  
+  '234567' is contained here:
+    9001011234567
+FAILED tests/test_r4_workspace.py::test_pii_variants_mask_and_vault[110 123 456789] - AssertionError: assert '456789' not in '110123456789'
+  
+  '456789' is contained here:
+    110123456789
+FAILED tests/test_r4_workspace.py::test_pii_variants_mask_and_vault[+82 10-1234-5678] - AssertionError: assert '1234' not in '821012345678'
+  
+  '1234' is contained here:
+    821012345678
+  ?     ++++
+FAILED tests/test_r4_workspace.py::test_pii_variants_mask_and_vault[+82-10-1234-5678] - AssertionError: assert '1234' not in '821012345678'
+  
+  '1234' is contained here:
+    821012345678
+  ?     ++++
+FAILED tests/test_r4_workspace.py::test_pii_variants_mask_and_vault[0082 10 1234 5678] - AssertionError: assert '1234' not in '00821012345678'
+  
+  '1234' is contained here:
+    00821012345678
+  ?       ++++
+FAILED tests/test_r4_workspace.py::test_pii_variants_mask_and_vault[\uff10\uff11\uff10\u2212\uff11\uff12\uff13\uff14-\uff15\uff16\uff17\uff18] - AssertionError: assert '1234' not in '01012345678'
+  
+  '1234' is contained here:
+    01012345678
+  ?    ++++
+FAILED tests/test_r4_workspace.py::test_pii_variants_mask_and_vault[01\uff10-\u0661\u0662\u0663\u0664-5678] - AssertionError: assert '1234' not in '01012345678'
+  
+  '1234' is contained here:
+    01012345678
+  ?    ++++
+FAILED tests/test_r4_workspace.py::test_spaced_mixed_separators[900101 - 1234567] - AssertionError: assert '234567' not in '9001011234567'
+  
+  '234567' is contained here:
+    9001011234567
+FAILED tests/test_r4_workspace.py::test_spaced_mixed_separators[010 - 1234 - 5678] - AssertionError: assert '1234' not in '01012345678'
+  
+  '1234' is contained here:
+    01012345678
+  ?    ++++
+FAILED tests/test_r4_workspace.py::test_spaced_mixed_separators[+82 10 - 1234 - 5678] - AssertionError: assert '1234' not in '821012345678'
+  
+  '1234' is contained here:
+    821012345678
+  ?     ++++
+FAILED tests/test_r4_workspace.py::test_spaced_mixed_separators[\uff19\uff10\uff10\uff11\uff10\uff11 \u2212 \uff15\uff12\uff13\uff14\uff15\uff16\uff17] - AssertionError: assert '234567' not in '9001015234567'
+  
+  '234567' is contained here:
+    9001015234567
+FAILED tests/test_r4_workspace.py::test_spaced_mixed_separators[\uff11\uff11 \u2212 \uff12\uff12 \u2212 \uff11\uff12\uff13\uff14\uff15\uff16 \u2212 \uff10\uff11] - AssertionError: assert '1234' not in '112212345601'
+  
+  '1234' is contained here:
+    112212345601
+  ?     ++++
+13 failed in 0.24s

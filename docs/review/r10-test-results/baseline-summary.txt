@@ -1,0 +1,95 @@
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_read_semantics[lazyforensic manifest evidence --verify m.json] - AssertionError: [FORENSIC INTEGRITY GUARD] Write operation BLOCKED — protected evidence identity
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_read_semantics[lazyforensic scan evidence --markdown reports/survey.md] - AssertionError: [FORENSIC INTEGRITY GUARD] Write operation BLOCKED — protected evidence identity
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_read_semantics[lazyforensic pii evidence/chat.txt] - AssertionError: [FORENSIC INTEGRITY GUARD] Write operation BLOCKED — protected evidence identity
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_read_semantics[lazyothers stamp evidence/contract.pdf] - AssertionError: [FORENSIC INTEGRITY GUARD] Write operation BLOCKED — protected evidence identity
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_read_semantics[node scripts/case_mode.mjs init evidence --out ../case] - AssertionError: [FORENSIC INTEGRITY GUARD] Write operation BLOCKED — protected evidence identity
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_read_semantics[python3 skills/forensic-audit/scripts/audit_timestamps.py evidence/chat.txt --json > audit.json] - AssertionError: [FORENSIC INTEGRITY GUARD] Write operation BLOCKED — protected evidence identity
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_write_denied[exiftool -XMP:Comment=pwn evidence/photo.jpg] - assert 0 == 1
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_write_denied[exiftool -Comment+=pwn evidence/photo.jpg] - assert 0 == 1
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_write_denied[exiftool "-DateTimeOriginal-=1:0:0" evidence/photo.jpg] - assert 0 == 1
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_write_denied[exiftool -geotag /tmp/t.gpx evidence/photo.jpg] - assert 0 == 1
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_write_denied[exiftool -@ /tmp/args.txt evidence/photo.jpg] - assert 0 == 1
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_write_denied[tar -xf /tmp/a.tar --directory=evidence] - assert 0 == 1
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_write_denied[git --work-tree=evidence checkout HEAD -- .] - assert 0 == 1
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_patch_text - assert 0 == 1
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_read_relay[sha256sum evidence/chat.txt] - AssertionError: assert [{'timestamp'...': None, ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_read_relay[git status] - AssertionError: assert [{'timestamp'...': None, ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_read_relay[ls] - AssertionError: assert [{'timestamp'...': None, ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_read_relay[grep -rn \uacc4\uc57d\uae08 evidence] - AssertionError: assert [{'timestamp'...': None, ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_read_relay[grep -o \uacc4\uc57d\uae08 evidence/chat.txt] - AssertionError: assert [{'timestamp'...u0/계약금', ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_read_relay[sort -t , -k2 reports/x.csv] - AssertionError: assert [{'timestamp'...___0/,', ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_read_relay[exiftool -j evidence/photo.jpg] - AssertionError: assert [{'timestamp'...': None, ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_mcp_read_relay[mcp__github__get_issue-args0] - AssertionError: assert [{'timestamp'...': None, ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_mcp_read_relay[call_mcp_tool-args1] - AssertionError: assert [{'timestamp'...': None, ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_mcp_read_relay[mcp__memory__read_graph-args2] - AssertionError: assert [{'timestamp'...': None, ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_unknown_verdict - AssertionError: file:///private/tmp/lazyneon-r10-baseline/scripts/guard_verdict.mjs:6
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_hooks_registered - assert False
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_case_overlap - assert (0 != 0)
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_single_evidence - AssertionError: assert 1 == 0
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_shared_pii[M123A4567] - AssertionError: assert 'M123A4567' != 'M123A4567'
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_shared_pii[+82 31 123 4567] - AssertionError: assert '+82 31 123 4567' != '+82 31 123 4567'
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_shared_pii[02.123.4567] - AssertionError: assert '02.123.4567' != '02.123.4567'
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_shared_pii[\uc8fc\ubbfc\ub4f1\ub85d\ubc88\ud638: 9001011234567] - AssertionError: assert '주민등록번호: 9001011234567' != '주민등록번호: 9001011234567'
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_shared_pii[\uc678\uad6d\uc778\ub4f1\ub85d\ubc88\ud638: 9001015123456] - AssertionError: assert '외국인등록번호: 9001015123456' != '외국인등록번호: 9001015123456'
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_shared_pii[\uacc4\uc88c\ubc88\ud638: 110123456789] - AssertionError: assert '계좌번호: 110123456789' != '계좌번호: 110123456789'
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_encoding_and_zero_output - AssertionError: assert 'stale' == '성명: 김철수'
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_file_header_text[inventory.csv] - AssertionError: assert 1 == 0
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_file_header_text[notes.md] - AssertionError: assert 1 == 0
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_directory_copy - AssertionError: assert {'<HOME>...opy0/reports'} == {'<HOME>...ports/two.md'}
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_lock_abort - AssertionError: assert (0 != 0)
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_no_core_registry_read - AssertionError: assert '<SANDBOX>/tmp/pytest-of-user/pytest-166/test_r10_no_core_registry_read0/.lazyneon' not in ['<SANDBOX>/tmp/pytest-of-user/pytest-166/test_r10_no_core_registry_read0', '<HOME>...ace', '<SANDBOX>/tmp/pytest-of-user/pytest-166/test_r10_no_core_registry_read0/custody']
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_manifest_grounding - Failed: DID NOT RAISE ValueError
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_nested_symlink[file] - assert (0 != 0)
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_nested_symlink[directory] - assert (0 != 0)
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_pii_read_error - AssertionError: assert 0 == 2
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_download_default - KeyError: 'download_enabled'
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_download_consent_and_offline[LAZYNEON_OFFLINE] - ModuleNotFoundError: No module named 'model_download_policy'
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_download_consent_and_offline[LAZYNEON_WS_OFFLINE] - ModuleNotFoundError: No module named 'model_download_policy'
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_download_consent_and_offline[LAZYNEON_WS] - ModuleNotFoundError: No module named 'model_download_policy'
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_whisper_local_only - AssertionError: assert [{}] == [{'local_files_only': True}]
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_path_identity[NFD] - assert 0 == 1
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_path_identity[uppercase] - assert 0 == 1
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_core_journal[brief.md] - AssertionError: assert ([{'timestamp'...ief.md', ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_core_journal[claim-graph.md] - AssertionError: assert ([{'timestamp'...aph.md', ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_core_journal[intent-diff.md] - AssertionError: assert ([{'timestamp'...iff.md', ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_core_journal[observation-manifest.md] - AssertionError: assert ([{'timestamp'...est.md', ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_core_journal[verification-economics.md] - AssertionError: assert ([{'timestamp'...ics.md', ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_core_journal[cause-disappearance.md] - AssertionError: assert ([{'timestamp'...nce.md', ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_core_journal[excursion-log.md] - AssertionError: assert ([{'timestamp'...log.md', ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_core_journal[expansion-log.md] - AssertionError: assert ([{'timestamp'...log.md', ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_core_journal[sources-ledger.md] - AssertionError: assert ([{'timestamp'...ger.md', ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_core_journal[debate-log.md] - AssertionError: assert ([{'timestamp'...log.md', ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_required_module - AssertionError: assert 0 == 2
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_local_media_example - assert ('이번 파일' in '---\nname: media-analysis\ndescription: "음성/이미지/영상 파일 분석 워크플로: ffprobe 메타데이터 → 영상 무결성·오디오 서베이 → 프레임 추출(네이티브 비전 분석) → ...공을 주장하지 않는다. 로컬 파일의 `local_stt.py` 서버 전송에도 `--upload-audio` 동의가 필수다.\n\n비전 텍스트 판독은 `모델 판독(미검증)`으로 표시하고 OCR 출력과 대조한다.\n')
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_timestamp_output - AssertionError: usage: audit_timestamps.py [-h] [--json] file
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_real_hook_dispatch[exec_command] - assert []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_real_hook_dispatch[search_update] - assert []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_bind_mixed - AssertionError: assert ('<SANDBOX>/tmp/pytest-of-user/pytest-166/test_r10_bind_mixed0/b.png' in 'error: PDF 병합 실패: source or target not a PDF\n')
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_audit_concurrent - KeyError: 'status'
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_report_hook_manifest - AssertionError: [HALLUCINATION GUARD] timeline 근거 파일 미발견 — 타임라인 grounding 생략. timeline.json이 있다면 보고서와 같은 디렉터리에 두십시오: <SANDBOX>/tmp/pytest-of-user/pytest-166/test_r10_report_hook_manifest0
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_symlink_cli_failure_detected - AssertionError: assert 2 == 0
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_matcher_mutation_detected - assert False
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_case_display_and_settings - assert (0 == 0 and '../disk.E02' not in '[case-mode]...성을 재검증합니다.\n'
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_read_tool_output_boundary[mcp__kordoc__parse_document] - AssertionError: assert 1 == 0
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_read_tool_output_boundary[read_file] - AssertionError: assert 1 == 0
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_noncontent_relay[sha256sum evidence/chat.txt 2>&1] - AssertionError: assert [{'timestamp'...': None, ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_noncontent_relay[rm reports/old.md] - AssertionError: assert [{'timestamp'...': None, ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_noncontent_relay[chmod 600 reports/a.md] - AssertionError: assert [{'timestamp'...': None, ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_interpreter_write_modes[python3 - <<'EOF'\nopen('evidence/a.txt','w').write('x')\nEOF] - assert 0 == 1
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_read_flags[exiftool -orientation -j evidence/a.jpg] - AssertionError: assert [{'timestamp'...': None, ...}] == []
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_read_flags[python3 -c "print(open('evidence/a.txt','r').read())"] - assert 1 == 0
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_unknown_script_policy - AssertionError: assert (1 == 1 and 'fail' == 'unchecked'
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_structural_signature - AssertionError: assert 1 == 0
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_evidence_link_referent_protected[file] - assert 0 == 1
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_evidence_link_referent_protected[directory] - assert 0 == 1
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_case_output_alias[custody] - assert (0 != 0)
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_case_output_alias[.lazyneon-workspace] - assert (0 != 0)
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_existing_settings - assert (0 != 0)
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_unlisted_read_mcp - AssertionError: assert 1 == 0
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_case_existing_log_link - assert (0 != 0)
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_pii_directory_write_boundary - AssertionError: assert 1 == 0
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_ffmpeg_option_roles - AssertionError: assert ['<HOME>...on_roles0/30'] == ['<HOME>...rts/clip.mp4']
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_other_models_offline_and_local[openai] - Failed: DID NOT RAISE PermissionError
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_other_models_offline_and_local[sensevoice] - Failed: DID NOT RAISE PermissionError
+FAILED ../../../../../tmp/lazyneon-r10-baseline/tests/test_r10_balancing.py::test_r10_other_models_offline_and_local[moonshine] - Failed: DID NOT RAISE PermissionError
+94 failed, 24 passed, 5 warnings in 13.17s

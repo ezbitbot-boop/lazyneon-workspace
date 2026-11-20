@@ -1,0 +1,42 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "node ./scripts/session_start.mjs",
+        "timeout": 15
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./scripts/evidence_guard.mjs pre-tool-use",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./scripts/domain_feedback.mjs batch evidence_guard.mjs hallucination_guard.mjs legal_factuality_guard.mjs slop_guard.mjs",
+            "timeout": 125
+          }
+        ]
+      }
+    ],
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "node ./scripts/domain_feedback.mjs inject",
+        "timeout": 5
+      }
+    ]
+  }
+}

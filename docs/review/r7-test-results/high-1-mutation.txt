@@ -1,0 +1,532 @@
+FFFFFFFFFFFF..FFFF                                                       [100%]
+=================================== FAILURES ===================================
+_ test_unavailable_verifier_blocks_and_relays[missing-hallucination_guard.mjs] _
+
+ctx = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-71/test_unavailable_verifier_bloc0')
+guard = 'hallucination_guard.mjs', failure = 'missing'
+
+    @pytest.mark.parametrize('guard', ['hallucination_guard.mjs', 'legal_factuality_guard.mjs'])
+    @pytest.mark.parametrize('failure', ['missing', 'clt', 'store', 'dependency', 'silent', 'crash'])
+    def test_unavailable_verifier_blocks_and_relays(ctx, guard, failure):
+        report = ctx/'감정보고서_소장.md'
+        report.write_text('# 감정 보고서 SHA-256 소장 청구원인')
+        interpreter = ctx/'python-stub'
+        if failure != 'missing':
+            body = {
+                'clt': 'import sys; sys.stderr.write("xcode-select: No developer tools"); sys.exit(1)',
+                'store': 'import sys; sys.stderr.write("Python was not found; Microsoft Store"); sys.exit(1)',
+                'dependency': 'import missing_r7_verifier_dependency',
+                'silent': 'pass',
+                'crash': 'import os, signal; os.kill(os.getpid(), signal.SIGKILL)',
+            }[failure]
+            interpreter.write_text('#!'+sys.executable+'\n'+body+'\n')
+            interpreter.chmod(0o755)
+        env = {'LAZYNEON_WS_PYTHON': str(interpreter)}
+        payload = event(ctx, {'path': str(report)})
+        result = run(guard, payload, env=env)
+>       assert result.returncode == 1, (result.stdout, result.stderr)
+E       AssertionError: ('{}
+E         ', 'python 실행 불가
+E         ')
+E       assert 0 == 1
+E        +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+
+tests/test_r7_workspace.py:28: AssertionError
+_ test_unavailable_verifier_blocks_and_relays[missing-legal_factuality_guard.mjs] _
+
+ctx = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-71/test_unavailable_verifier_bloc1')
+guard = 'legal_factuality_guard.mjs', failure = 'missing'
+
+    @pytest.mark.parametrize('guard', ['hallucination_guard.mjs', 'legal_factuality_guard.mjs'])
+    @pytest.mark.parametrize('failure', ['missing', 'clt', 'store', 'dependency', 'silent', 'crash'])
+    def test_unavailable_verifier_blocks_and_relays(ctx, guard, failure):
+        report = ctx/'감정보고서_소장.md'
+        report.write_text('# 감정 보고서 SHA-256 소장 청구원인')
+        interpreter = ctx/'python-stub'
+        if failure != 'missing':
+            body = {
+                'clt': 'import sys; sys.stderr.write("xcode-select: No developer tools"); sys.exit(1)',
+                'store': 'import sys; sys.stderr.write("Python was not found; Microsoft Store"); sys.exit(1)',
+                'dependency': 'import missing_r7_verifier_dependency',
+                'silent': 'pass',
+                'crash': 'import os, signal; os.kill(os.getpid(), signal.SIGKILL)',
+            }[failure]
+            interpreter.write_text('#!'+sys.executable+'\n'+body+'\n')
+            interpreter.chmod(0o755)
+        env = {'LAZYNEON_WS_PYTHON': str(interpreter)}
+        payload = event(ctx, {'path': str(report)})
+        result = run(guard, payload, env=env)
+>       assert result.returncode == 1, (result.stdout, result.stderr)
+E       AssertionError: ('{}
+E         ', 'python 실행 불가
+E         ')
+E       assert 0 == 1
+E        +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/legal_factuality_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+
+tests/test_r7_workspace.py:28: AssertionError
+___ test_unavailable_verifier_blocks_and_relays[clt-hallucination_guard.mjs] ___
+
+ctx = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-71/test_unavailable_verifier_bloc2')
+guard = 'hallucination_guard.mjs', failure = 'clt'
+
+    @pytest.mark.parametrize('guard', ['hallucination_guard.mjs', 'legal_factuality_guard.mjs'])
+    @pytest.mark.parametrize('failure', ['missing', 'clt', 'store', 'dependency', 'silent', 'crash'])
+    def test_unavailable_verifier_blocks_and_relays(ctx, guard, failure):
+        report = ctx/'감정보고서_소장.md'
+        report.write_text('# 감정 보고서 SHA-256 소장 청구원인')
+        interpreter = ctx/'python-stub'
+        if failure != 'missing':
+            body = {
+                'clt': 'import sys; sys.stderr.write("xcode-select: No developer tools"); sys.exit(1)',
+                'store': 'import sys; sys.stderr.write("Python was not found; Microsoft Store"); sys.exit(1)',
+                'dependency': 'import missing_r7_verifier_dependency',
+                'silent': 'pass',
+                'crash': 'import os, signal; os.kill(os.getpid(), signal.SIGKILL)',
+            }[failure]
+            interpreter.write_text('#!'+sys.executable+'\n'+body+'\n')
+            interpreter.chmod(0o755)
+        env = {'LAZYNEON_WS_PYTHON': str(interpreter)}
+        payload = event(ctx, {'path': str(report)})
+        result = run(guard, payload, env=env)
+>       assert result.returncode == 1, (result.stdout, result.stderr)
+E       AssertionError: ('{}
+E         ', 'python 실행 불가
+E         ')
+E       assert 0 == 1
+E        +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+
+tests/test_r7_workspace.py:28: AssertionError
+_ test_unavailable_verifier_blocks_and_relays[clt-legal_factuality_guard.mjs] __
+
+ctx = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-71/test_unavailable_verifier_bloc3')
+guard = 'legal_factuality_guard.mjs', failure = 'clt'
+
+    @pytest.mark.parametrize('guard', ['hallucination_guard.mjs', 'legal_factuality_guard.mjs'])
+    @pytest.mark.parametrize('failure', ['missing', 'clt', 'store', 'dependency', 'silent', 'crash'])
+    def test_unavailable_verifier_blocks_and_relays(ctx, guard, failure):
+        report = ctx/'감정보고서_소장.md'
+        report.write_text('# 감정 보고서 SHA-256 소장 청구원인')
+        interpreter = ctx/'python-stub'
+        if failure != 'missing':
+            body = {
+                'clt': 'import sys; sys.stderr.write("xcode-select: No developer tools"); sys.exit(1)',
+                'store': 'import sys; sys.stderr.write("Python was not found; Microsoft Store"); sys.exit(1)',
+                'dependency': 'import missing_r7_verifier_dependency',
+                'silent': 'pass',
+                'crash': 'import os, signal; os.kill(os.getpid(), signal.SIGKILL)',
+            }[failure]
+            interpreter.write_text('#!'+sys.executable+'\n'+body+'\n')
+            interpreter.chmod(0o755)
+        env = {'LAZYNEON_WS_PYTHON': str(interpreter)}
+        payload = event(ctx, {'path': str(report)})
+        result = run(guard, payload, env=env)
+>       assert result.returncode == 1, (result.stdout, result.stderr)
+E       AssertionError: ('{}
+E         ', 'python 실행 불가
+E         ')
+E       assert 0 == 1
+E        +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/legal_factuality_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+
+tests/test_r7_workspace.py:28: AssertionError
+__ test_unavailable_verifier_blocks_and_relays[store-hallucination_guard.mjs] __
+
+ctx = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-71/test_unavailable_verifier_bloc4')
+guard = 'hallucination_guard.mjs', failure = 'store'
+
+    @pytest.mark.parametrize('guard', ['hallucination_guard.mjs', 'legal_factuality_guard.mjs'])
+    @pytest.mark.parametrize('failure', ['missing', 'clt', 'store', 'dependency', 'silent', 'crash'])
+    def test_unavailable_verifier_blocks_and_relays(ctx, guard, failure):
+        report = ctx/'감정보고서_소장.md'
+        report.write_text('# 감정 보고서 SHA-256 소장 청구원인')
+        interpreter = ctx/'python-stub'
+        if failure != 'missing':
+            body = {
+                'clt': 'import sys; sys.stderr.write("xcode-select: No developer tools"); sys.exit(1)',
+                'store': 'import sys; sys.stderr.write("Python was not found; Microsoft Store"); sys.exit(1)',
+                'dependency': 'import missing_r7_verifier_dependency',
+                'silent': 'pass',
+                'crash': 'import os, signal; os.kill(os.getpid(), signal.SIGKILL)',
+            }[failure]
+            interpreter.write_text('#!'+sys.executable+'\n'+body+'\n')
+            interpreter.chmod(0o755)
+        env = {'LAZYNEON_WS_PYTHON': str(interpreter)}
+        payload = event(ctx, {'path': str(report)})
+        result = run(guard, payload, env=env)
+>       assert result.returncode == 1, (result.stdout, result.stderr)
+E       AssertionError: ('{}
+E         ', 'python 실행 불가
+E         ')
+E       assert 0 == 1
+E        +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+
+tests/test_r7_workspace.py:28: AssertionError
+_ test_unavailable_verifier_blocks_and_relays[store-legal_factuality_guard.mjs] _
+
+ctx = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-71/test_unavailable_verifier_bloc5')
+guard = 'legal_factuality_guard.mjs', failure = 'store'
+
+    @pytest.mark.parametrize('guard', ['hallucination_guard.mjs', 'legal_factuality_guard.mjs'])
+    @pytest.mark.parametrize('failure', ['missing', 'clt', 'store', 'dependency', 'silent', 'crash'])
+    def test_unavailable_verifier_blocks_and_relays(ctx, guard, failure):
+        report = ctx/'감정보고서_소장.md'
+        report.write_text('# 감정 보고서 SHA-256 소장 청구원인')
+        interpreter = ctx/'python-stub'
+        if failure != 'missing':
+            body = {
+                'clt': 'import sys; sys.stderr.write("xcode-select: No developer tools"); sys.exit(1)',
+                'store': 'import sys; sys.stderr.write("Python was not found; Microsoft Store"); sys.exit(1)',
+                'dependency': 'import missing_r7_verifier_dependency',
+                'silent': 'pass',
+                'crash': 'import os, signal; os.kill(os.getpid(), signal.SIGKILL)',
+            }[failure]
+            interpreter.write_text('#!'+sys.executable+'\n'+body+'\n')
+            interpreter.chmod(0o755)
+        env = {'LAZYNEON_WS_PYTHON': str(interpreter)}
+        payload = event(ctx, {'path': str(report)})
+        result = run(guard, payload, env=env)
+>       assert result.returncode == 1, (result.stdout, result.stderr)
+E       AssertionError: ('{}
+E         ', 'python 실행 불가
+E         ')
+E       assert 0 == 1
+E        +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/legal_factuality_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+
+tests/test_r7_workspace.py:28: AssertionError
+_ test_unavailable_verifier_blocks_and_relays[dependency-hallucination_guard.mjs] _
+
+ctx = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-71/test_unavailable_verifier_bloc6')
+guard = 'hallucination_guard.mjs', failure = 'dependency'
+
+    @pytest.mark.parametrize('guard', ['hallucination_guard.mjs', 'legal_factuality_guard.mjs'])
+    @pytest.mark.parametrize('failure', ['missing', 'clt', 'store', 'dependency', 'silent', 'crash'])
+    def test_unavailable_verifier_blocks_and_relays(ctx, guard, failure):
+        report = ctx/'감정보고서_소장.md'
+        report.write_text('# 감정 보고서 SHA-256 소장 청구원인')
+        interpreter = ctx/'python-stub'
+        if failure != 'missing':
+            body = {
+                'clt': 'import sys; sys.stderr.write("xcode-select: No developer tools"); sys.exit(1)',
+                'store': 'import sys; sys.stderr.write("Python was not found; Microsoft Store"); sys.exit(1)',
+                'dependency': 'import missing_r7_verifier_dependency',
+                'silent': 'pass',
+                'crash': 'import os, signal; os.kill(os.getpid(), signal.SIGKILL)',
+            }[failure]
+            interpreter.write_text('#!'+sys.executable+'\n'+body+'\n')
+            interpreter.chmod(0o755)
+        env = {'LAZYNEON_WS_PYTHON': str(interpreter)}
+        payload = event(ctx, {'path': str(report)})
+        result = run(guard, payload, env=env)
+>       assert result.returncode == 1, (result.stdout, result.stderr)
+E       AssertionError: ('{}
+E         ', 'python 실행 불가
+E         ')
+E       assert 0 == 1
+E        +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+
+tests/test_r7_workspace.py:28: AssertionError
+_ test_unavailable_verifier_blocks_and_relays[dependency-legal_factuality_guard.mjs] _
+
+ctx = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-71/test_unavailable_verifier_bloc7')
+guard = 'legal_factuality_guard.mjs', failure = 'dependency'
+
+    @pytest.mark.parametrize('guard', ['hallucination_guard.mjs', 'legal_factuality_guard.mjs'])
+    @pytest.mark.parametrize('failure', ['missing', 'clt', 'store', 'dependency', 'silent', 'crash'])
+    def test_unavailable_verifier_blocks_and_relays(ctx, guard, failure):
+        report = ctx/'감정보고서_소장.md'
+        report.write_text('# 감정 보고서 SHA-256 소장 청구원인')
+        interpreter = ctx/'python-stub'
+        if failure != 'missing':
+            body = {
+                'clt': 'import sys; sys.stderr.write("xcode-select: No developer tools"); sys.exit(1)',
+                'store': 'import sys; sys.stderr.write("Python was not found; Microsoft Store"); sys.exit(1)',
+                'dependency': 'import missing_r7_verifier_dependency',
+                'silent': 'pass',
+                'crash': 'import os, signal; os.kill(os.getpid(), signal.SIGKILL)',
+            }[failure]
+            interpreter.write_text('#!'+sys.executable+'\n'+body+'\n')
+            interpreter.chmod(0o755)
+        env = {'LAZYNEON_WS_PYTHON': str(interpreter)}
+        payload = event(ctx, {'path': str(report)})
+        result = run(guard, payload, env=env)
+>       assert result.returncode == 1, (result.stdout, result.stderr)
+E       AssertionError: ('{}
+E         ', 'python 실행 불가
+E         ')
+E       assert 0 == 1
+E        +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/legal_factuality_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+
+tests/test_r7_workspace.py:28: AssertionError
+_ test_unavailable_verifier_blocks_and_relays[silent-hallucination_guard.mjs] __
+
+ctx = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-71/test_unavailable_verifier_bloc8')
+guard = 'hallucination_guard.mjs', failure = 'silent'
+
+    @pytest.mark.parametrize('guard', ['hallucination_guard.mjs', 'legal_factuality_guard.mjs'])
+    @pytest.mark.parametrize('failure', ['missing', 'clt', 'store', 'dependency', 'silent', 'crash'])
+    def test_unavailable_verifier_blocks_and_relays(ctx, guard, failure):
+        report = ctx/'감정보고서_소장.md'
+        report.write_text('# 감정 보고서 SHA-256 소장 청구원인')
+        interpreter = ctx/'python-stub'
+        if failure != 'missing':
+            body = {
+                'clt': 'import sys; sys.stderr.write("xcode-select: No developer tools"); sys.exit(1)',
+                'store': 'import sys; sys.stderr.write("Python was not found; Microsoft Store"); sys.exit(1)',
+                'dependency': 'import missing_r7_verifier_dependency',
+                'silent': 'pass',
+                'crash': 'import os, signal; os.kill(os.getpid(), signal.SIGKILL)',
+            }[failure]
+            interpreter.write_text('#!'+sys.executable+'\n'+body+'\n')
+            interpreter.chmod(0o755)
+        env = {'LAZYNEON_WS_PYTHON': str(interpreter)}
+        payload = event(ctx, {'path': str(report)})
+        result = run(guard, payload, env=env)
+>       assert result.returncode == 1, (result.stdout, result.stderr)
+E       AssertionError: ('{}
+E         ', 'python 실행 불가
+E         ')
+E       assert 0 == 1
+E        +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+
+tests/test_r7_workspace.py:28: AssertionError
+_ test_unavailable_verifier_blocks_and_relays[silent-legal_factuality_guard.mjs] _
+
+ctx = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-71/test_unavailable_verifier_bloc9')
+guard = 'legal_factuality_guard.mjs', failure = 'silent'
+
+    @pytest.mark.parametrize('guard', ['hallucination_guard.mjs', 'legal_factuality_guard.mjs'])
+    @pytest.mark.parametrize('failure', ['missing', 'clt', 'store', 'dependency', 'silent', 'crash'])
+    def test_unavailable_verifier_blocks_and_relays(ctx, guard, failure):
+        report = ctx/'감정보고서_소장.md'
+        report.write_text('# 감정 보고서 SHA-256 소장 청구원인')
+        interpreter = ctx/'python-stub'
+        if failure != 'missing':
+            body = {
+                'clt': 'import sys; sys.stderr.write("xcode-select: No developer tools"); sys.exit(1)',
+                'store': 'import sys; sys.stderr.write("Python was not found; Microsoft Store"); sys.exit(1)',
+                'dependency': 'import missing_r7_verifier_dependency',
+                'silent': 'pass',
+                'crash': 'import os, signal; os.kill(os.getpid(), signal.SIGKILL)',
+            }[failure]
+            interpreter.write_text('#!'+sys.executable+'\n'+body+'\n')
+            interpreter.chmod(0o755)
+        env = {'LAZYNEON_WS_PYTHON': str(interpreter)}
+        payload = event(ctx, {'path': str(report)})
+        result = run(guard, payload, env=env)
+>       assert result.returncode == 1, (result.stdout, result.stderr)
+E       AssertionError: ('{}
+E         ', 'python 실행 불가
+E         ')
+E       assert 0 == 1
+E        +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/legal_factuality_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+
+tests/test_r7_workspace.py:28: AssertionError
+__ test_unavailable_verifier_blocks_and_relays[crash-hallucination_guard.mjs] __
+
+ctx = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-71/test_unavailable_verifier_bloc10')
+guard = 'hallucination_guard.mjs', failure = 'crash'
+
+    @pytest.mark.parametrize('guard', ['hallucination_guard.mjs', 'legal_factuality_guard.mjs'])
+    @pytest.mark.parametrize('failure', ['missing', 'clt', 'store', 'dependency', 'silent', 'crash'])
+    def test_unavailable_verifier_blocks_and_relays(ctx, guard, failure):
+        report = ctx/'감정보고서_소장.md'
+        report.write_text('# 감정 보고서 SHA-256 소장 청구원인')
+        interpreter = ctx/'python-stub'
+        if failure != 'missing':
+            body = {
+                'clt': 'import sys; sys.stderr.write("xcode-select: No developer tools"); sys.exit(1)',
+                'store': 'import sys; sys.stderr.write("Python was not found; Microsoft Store"); sys.exit(1)',
+                'dependency': 'import missing_r7_verifier_dependency',
+                'silent': 'pass',
+                'crash': 'import os, signal; os.kill(os.getpid(), signal.SIGKILL)',
+            }[failure]
+            interpreter.write_text('#!'+sys.executable+'\n'+body+'\n')
+            interpreter.chmod(0o755)
+        env = {'LAZYNEON_WS_PYTHON': str(interpreter)}
+        payload = event(ctx, {'path': str(report)})
+        result = run(guard, payload, env=env)
+>       assert result.returncode == 1, (result.stdout, result.stderr)
+E       AssertionError: ('{}
+E         ', 'python 실행 불가
+E         ')
+E       assert 0 == 1
+E        +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+
+tests/test_r7_workspace.py:28: AssertionError
+_ test_unavailable_verifier_blocks_and_relays[crash-legal_factuality_guard.mjs] _
+
+ctx = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-71/test_unavailable_verifier_bloc11')
+guard = 'legal_factuality_guard.mjs', failure = 'crash'
+
+    @pytest.mark.parametrize('guard', ['hallucination_guard.mjs', 'legal_factuality_guard.mjs'])
+    @pytest.mark.parametrize('failure', ['missing', 'clt', 'store', 'dependency', 'silent', 'crash'])
+    def test_unavailable_verifier_blocks_and_relays(ctx, guard, failure):
+        report = ctx/'감정보고서_소장.md'
+        report.write_text('# 감정 보고서 SHA-256 소장 청구원인')
+        interpreter = ctx/'python-stub'
+        if failure != 'missing':
+            body = {
+                'clt': 'import sys; sys.stderr.write("xcode-select: No developer tools"); sys.exit(1)',
+                'store': 'import sys; sys.stderr.write("Python was not found; Microsoft Store"); sys.exit(1)',
+                'dependency': 'import missing_r7_verifier_dependency',
+                'silent': 'pass',
+                'crash': 'import os, signal; os.kill(os.getpid(), signal.SIGKILL)',
+            }[failure]
+            interpreter.write_text('#!'+sys.executable+'\n'+body+'\n')
+            interpreter.chmod(0o755)
+        env = {'LAZYNEON_WS_PYTHON': str(interpreter)}
+        payload = event(ctx, {'path': str(report)})
+        result = run(guard, payload, env=env)
+>       assert result.returncode == 1, (result.stdout, result.stderr)
+E       AssertionError: ('{}
+E         ', 'python 실행 불가
+E         ')
+E       assert 0 == 1
+E        +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/legal_factuality_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+
+tests/test_r7_workspace.py:28: AssertionError
+_________ test_missing_verifier_script_blocks[hallucination_guard.mjs] _________
+
+ctx = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-71/test_missing_verifier_script_b0')
+guard = 'hallucination_guard.mjs'
+
+    @pytest.mark.parametrize('guard', ['hallucination_guard.mjs', 'legal_factuality_guard.mjs'])
+    def test_missing_verifier_script_blocks(ctx, guard):
+        import shutil
+        scripts = ctx/'plugin/scripts'; scripts.mkdir(parents=True)
+        for source in (ROOT/'scripts').glob('*.mjs'):
+            shutil.copy2(source, scripts/source.name)
+        report = ctx/'감정보고서_소장.md'; report.write_text('감정 보고서 소장 청구원인')
+        result = subprocess.run(['node', str(scripts/guard)], input=json.dumps(event(ctx, {'path':str(report)})), capture_output=True, text=True, timeout=10)
+>       assert result.returncode == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/tmp/pytest-of-user/pytest-71/test_missing_verifier_script_b0/plugin/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+
+tests/test_r7_workspace.py:84: AssertionError
+_______ test_missing_verifier_script_blocks[legal_factuality_guard.mjs] ________
+
+ctx = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-71/test_missing_verifier_script_b1')
+guard = 'legal_factuality_guard.mjs'
+
+    @pytest.mark.parametrize('guard', ['hallucination_guard.mjs', 'legal_factuality_guard.mjs'])
+    def test_missing_verifier_script_blocks(ctx, guard):
+        import shutil
+        scripts = ctx/'plugin/scripts'; scripts.mkdir(parents=True)
+        for source in (ROOT/'scripts').glob('*.mjs'):
+            shutil.copy2(source, scripts/source.name)
+        report = ctx/'감정보고서_소장.md'; report.write_text('감정 보고서 소장 청구원인')
+        result = subprocess.run(['node', str(scripts/guard)], input=json.dumps(event(ctx, {'path':str(report)})), capture_output=True, text=True, timeout=10)
+>       assert result.returncode == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/tmp/pytest-of-user/pytest-71/test_missing_verifier_script_b1/plugin/scripts/legal_factuality_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+
+tests/test_r7_workspace.py:84: AssertionError
+_ test_guards_use_explicit_python_and_reject_clt_stub[hallucination_guard-\uac10\uc815 \ubcf4\uace0\uc11c SHA-256] _
+
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-71/test_guards_use_explicit_pytho0')
+guard = 'hallucination_guard', title = '감정 보고서 SHA-256'
+
+    @pytest.mark.parametrize('guard,title', [('hallucination_guard', '감정 보고서 SHA-256'), ('legal_factuality_guard', '소장 청구원인')])
+    def test_guards_use_explicit_python_and_reject_clt_stub(tmp_path, guard, title):
+        report = tmp_path / '감정보고서_소장.md'; report.write_text('# ' + title)
+        fake = tmp_path / 'python-stub'
+        fake.write_text('#!/bin/sh\necho "xcode-select: note: No developer tools were found" >&2\nexit 1\n'); fake.chmod(0o755)
+        result = hook(guard, {'workspacePaths': [str(tmp_path)], 'toolCall': {'args': {'TargetFile': str(report)}}}, ROOT, {'LAZYNEON_WS_PYTHON': str(fake)})
+>       assert result.returncode != 0, result.stderr
+E       AssertionError: python 실행 불가
+E         
+E       assert 0 != 0
+E        +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+
+tests/test_r3_workspace.py:135: AssertionError
+_ test_guards_use_explicit_python_and_reject_clt_stub[legal_factuality_guard-\uc18c\uc7a5 \uccad\uad6c\uc6d0\uc778] _
+
+tmp_path = PosixPath('<SANDBOX>/tmp/pytest-of-user/pytest-71/test_guards_use_explicit_pytho1')
+guard = 'legal_factuality_guard', title = '소장 청구원인'
+
+    @pytest.mark.parametrize('guard,title', [('hallucination_guard', '감정 보고서 SHA-256'), ('legal_factuality_guard', '소장 청구원인')])
+    def test_guards_use_explicit_python_and_reject_clt_stub(tmp_path, guard, title):
+        report = tmp_path / '감정보고서_소장.md'; report.write_text('# ' + title)
+        fake = tmp_path / 'python-stub'
+        fake.write_text('#!/bin/sh\necho "xcode-select: note: No developer tools were found" >&2\nexit 1\n'); fake.chmod(0o755)
+        result = hook(guard, {'workspacePaths': [str(tmp_path)], 'toolCall': {'args': {'TargetFile': str(report)}}}, ROOT, {'LAZYNEON_WS_PYTHON': str(fake)})
+>       assert result.returncode != 0, result.stderr
+E       AssertionError: python 실행 불가
+E         
+E       assert 0 != 0
+E        +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/legal_factuality_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+
+tests/test_r3_workspace.py:135: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_r7_workspace.py::test_unavailable_verifier_blocks_and_relays[missing-hallucination_guard.mjs] - AssertionError: ('{}
+  ', 'python 실행 불가
+  ')
+assert 0 == 1
+ +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+FAILED tests/test_r7_workspace.py::test_unavailable_verifier_blocks_and_relays[missing-legal_factuality_guard.mjs] - AssertionError: ('{}
+  ', 'python 실행 불가
+  ')
+assert 0 == 1
+ +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/legal_factuality_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+FAILED tests/test_r7_workspace.py::test_unavailable_verifier_blocks_and_relays[clt-hallucination_guard.mjs] - AssertionError: ('{}
+  ', 'python 실행 불가
+  ')
+assert 0 == 1
+ +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+FAILED tests/test_r7_workspace.py::test_unavailable_verifier_blocks_and_relays[clt-legal_factuality_guard.mjs] - AssertionError: ('{}
+  ', 'python 실행 불가
+  ')
+assert 0 == 1
+ +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/legal_factuality_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+FAILED tests/test_r7_workspace.py::test_unavailable_verifier_blocks_and_relays[store-hallucination_guard.mjs] - AssertionError: ('{}
+  ', 'python 실행 불가
+  ')
+assert 0 == 1
+ +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+FAILED tests/test_r7_workspace.py::test_unavailable_verifier_blocks_and_relays[store-legal_factuality_guard.mjs] - AssertionError: ('{}
+  ', 'python 실행 불가
+  ')
+assert 0 == 1
+ +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/legal_factuality_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+FAILED tests/test_r7_workspace.py::test_unavailable_verifier_blocks_and_relays[dependency-hallucination_guard.mjs] - AssertionError: ('{}
+  ', 'python 실행 불가
+  ')
+assert 0 == 1
+ +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+FAILED tests/test_r7_workspace.py::test_unavailable_verifier_blocks_and_relays[dependency-legal_factuality_guard.mjs] - AssertionError: ('{}
+  ', 'python 실행 불가
+  ')
+assert 0 == 1
+ +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/legal_factuality_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+FAILED tests/test_r7_workspace.py::test_unavailable_verifier_blocks_and_relays[silent-hallucination_guard.mjs] - AssertionError: ('{}
+  ', 'python 실행 불가
+  ')
+assert 0 == 1
+ +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+FAILED tests/test_r7_workspace.py::test_unavailable_verifier_blocks_and_relays[silent-legal_factuality_guard.mjs] - AssertionError: ('{}
+  ', 'python 실행 불가
+  ')
+assert 0 == 1
+ +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/legal_factuality_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+FAILED tests/test_r7_workspace.py::test_unavailable_verifier_blocks_and_relays[crash-hallucination_guard.mjs] - AssertionError: ('{}
+  ', 'python 실행 불가
+  ')
+assert 0 == 1
+ +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+FAILED tests/test_r7_workspace.py::test_unavailable_verifier_blocks_and_relays[crash-legal_factuality_guard.mjs] - AssertionError: ('{}
+  ', 'python 실행 불가
+  ')
+assert 0 == 1
+ +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/legal_factuality_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+FAILED tests/test_r7_workspace.py::test_missing_verifier_script_blocks[hallucination_guard.mjs] - AssertionError: assert 0 == 1
+ +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/tmp/pytest-of-user/pytest-71/test_missing_verifier_script_b0/plugin/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+FAILED tests/test_r7_workspace.py::test_missing_verifier_script_blocks[legal_factuality_guard.mjs] - AssertionError: assert 0 == 1
+ +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/tmp/pytest-of-user/pytest-71/test_missing_verifier_script_b1/plugin/scripts/legal_factuality_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+FAILED tests/test_r3_workspace.py::test_guards_use_explicit_python_and_reject_clt_stub[hallucination_guard-\uac10\uc815 \ubcf4\uace0\uc11c SHA-256] - AssertionError: python 실행 불가
+  
+assert 0 != 0
+ +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/hallucination_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+FAILED tests/test_r3_workspace.py::test_guards_use_explicit_python_and_reject_clt_stub[legal_factuality_guard-\uc18c\uc7a5 \uccad\uad6c\uc6d0\uc778] - AssertionError: python 실행 불가
+  
+assert 0 != 0
+ +  where 0 = CompletedProcess(args=['node', '<SANDBOX>/work/lazyneon-workspace/scripts/legal_factuality_guard.mjs'], returncode=0, stdout='{}\n', stderr='python 실행 불가\n').returncode
+16 failed, 2 passed, 2 deselected in 2.13s

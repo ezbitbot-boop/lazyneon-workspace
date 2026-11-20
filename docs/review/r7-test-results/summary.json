@@ -1,0 +1,37 @@
+[
+  {
+    "finding": "high-1",
+    "mutation": "always unavailable, exit 0",
+    "mutant_exit": 1,
+    "restored_exit": 0,
+    "files_restored_byte_for_byte": true
+  },
+  {
+    "finding": "high-2",
+    "mutation": "detected text + star",
+    "mutant_exit": 1,
+    "restored_exit": 0,
+    "files_restored_byte_for_byte": true
+  },
+  {
+    "finding": "medium-5",
+    "mutation": "pip execution under if False",
+    "mutant_exit": 1,
+    "restored_exit": 0,
+    "files_restored_byte_for_byte": true
+  },
+  {
+    "finding": "medium-6",
+    "mutation": "constant MD5 and SHA1",
+    "mutant_exit": 1,
+    "restored_exit": 0,
+    "files_restored_byte_for_byte": true
+  },
+  {
+    "finding": "medium-7",
+    "mutation": "silent early exit for report",
+    "mutant_exit": 1,
+    "restored_exit": 0,
+    "files_restored_byte_for_byte": true
+  }
+]

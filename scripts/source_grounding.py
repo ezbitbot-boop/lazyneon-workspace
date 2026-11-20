@@ -1,0 +1,661 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""source_grounding.py — 보고서 문장을 원본 자료(카톡·녹취·OCR 텍스트·첨부 파일)와 1:1 대조한다.
+
+verify_report.py 의 해시·금지어 검사로는 잡히지 않는 환각을 결정적으로 차단한다 (LLM 0콜):
+  1. 인용 실재: "…", “…”, ‘…’, '…'(한글 포함), 「…」, 『…』, 《…》, 〈…〉, <evidence>…</evidence> 안의 문장,
+     줄을 넘긴 인용, 대화 로그 형식 줄('> 김철수: …', 시각이 있는 '김철수: …', 코드블록 안 로그),
+     화자·발언 열이 있는 표의 발언 칸이 원본 텍스트에 그대로 있어야 한다.
+     법령·문서 제목(「민법」, 「개인정보 보호법」 제17조)과 정의어((이하 "이 사건 계약"이라 한다))는 제외한다.
+  2. 화자 귀속: 인용 줄에 화자가 한 명 언급되면 원본 발언자와 같아야 한다. 두 명 이상이면 그중 누구도
+     발언자가 아닐 때, 또는 조사(은/는/이/가/께서/의/에게서/한테서/로부터), '이름 :', 인용 바로 앞 이름으로
+     드러난 말한 사람이 원본 발언자가 아닐 때 오류다.
+  3. 시각 실재: 보고서의 분 단위 시각(2026-03-12 14:09, 2026.03.12 14:09, 2026년 3월 12일 오후 2:09,
+     연도 없는 3월 12일 14:09)이 원본/타임라인에 있어야 하고, 인용과 같은 줄의 시각은 그 발언의 원본 시각이어야 한다.
+  4. 수치 실재: "N건/개/회/통/명/차례/%/MB/페이지/프레임/시간/분간/초간"과 금액("N원", "N만원")이 원본에 같은
+     단위로 있거나, 집계 JSON/CSV에서 단위에 맞는 키(명→speakers, 건→messages 등)의 값이어야 한다.
+  5. 첨부 실재: 보고서가 언급한 증거 파일명(.jpg .m4a .pdf .hwp …)이 자료 폴더에 실제로 있어야 한다.
+명령·경로가 담긴 인라인 코드(`python …`, `evidence/…`)는 검사하지 않는다(한글 문장을 감싼 코드는 검사한다). '미확인/미측정/[INSUFFICIENT_DATA]'가 그 항목 뒤에서 단정 어미(…다) 없이 이어지면
+(예: "…"는 자료에서 미확인) 원본에 없는 인용·시각·수치·파일을 경고로 보고한다. 단정한 뒤 괄호로 덧붙인 '(일부 미확인)'은
+유보로 치지 않는다. 화자 오류는 어디서든 오류다.
+원본이 이미지·음성·PDF뿐이면 텍스트 대조가 불가능하므로, OCR/STT 텍스트를 자료 폴더에 함께 두어야 한다.
+결정적으로 못 잡는 것: 인용부호 없는 간접 화법("돈을 보냈다고 말했다"), 별칭·지위어(김씨, 피고)로 쓴 화자,
+한글 수사(열다섯 건), 3자 이하 짧은 인용. 이것은 사람이 읽고 확인해야 한다.
+
+CLI: python scripts/source_grounding.py 보고서.md --sources 자료폴더 [파일...] [--timeline events.json] [--json]
+"""
+from __future__ import annotations
+try:
+    from scripts.workspace_provenance import workspace_provenance, provenance_text
+except ModuleNotFoundError:
+    from workspace_provenance import workspace_provenance, provenance_text
+
+import argparse
+import csv
+import html
+import io
+import json
+import re
+import sys
+import unicodedata
+from pathlib import Path
+from typing import Any
+
+try:
+    from report_core import extract_timestamps
+except ImportError:
+    from scripts.report_core import extract_timestamps
+
+TEXT_EXTS = {".txt", ".csv", ".tsv", ".json", ".jsonl", ".md", ".log", ".srt", ".vtt", ".html", ".htm", ".xml"}
+EVIDENCE_FILE_EXTS = (
+    "jpg|jpeg|png|gif|heic|webp|bmp|tif|tiff|mp4|mov|avi|mkv|m4a|mp3|wav|aac|amr|3gp|ogg|"
+    "pdf|hwp|hwpx|doc|docx|xls|xlsx|ppt|pptx|zip|7z|e01|ex01|dd|raw|img|vmdk|pst|eml|msg|db|sqlite|txt|csv"
+)
+FILE_TOKEN_RE = re.compile(rf"(?<![\w./\\-])([\w가-힣()\[\] .,_-]*?[\w가-힣)\]_-]\.(?:{EVIDENCE_FILE_EXTS}))(?![A-Za-z0-9_])", re.IGNORECASE)
+BARE_FILE_RE = re.compile(rf"[\w가-힣() .\-]+\.(?:{EVIDENCE_FILE_EXTS})", re.IGNORECASE)
+QUOTE_RES = [
+    re.compile(r'"([^"\n]{1,1000})"'),
+    re.compile(r"“([^”\n]{1,1000})”"),
+    re.compile(r"‘([^’\n]{1,1000})’"),
+    re.compile(r"(?<![A-Za-z0-9])'([^'\n]{1,1000})'(?![A-Za-z0-9])"),
+    re.compile(r"「([^」\n]{1,1000})」"),
+    re.compile(r"『([^』\n]{1,1000})』"),
+    re.compile(r"《([^》\n]{1,1000})》"),
+    re.compile(r"〈([^〉\n]{1,1000})〉"),
+    re.compile(r"«([^»\n]{1,1000})»"),
+]
+SINGLE_QUOTE_IDX = {2, 3}
+SPEECH_AFTER_RE = re.compile(r"\s*(?:이?라고|이?라며|이?라는\s*(?:말|메시지|문자|발언|답장)|하고\s|고\s*(?:말|했|보냈|적|썼|외쳤|답))")
+QUOTE_CHARS_RE = re.compile(r"[\"“”‘’「」『』《》〈〉«»]")
+RECIPIENT_RE = re.compile(r"\s*(?:이?라는|이?라고\s*(?:적힌|된))?\s*(?:메시지|문자|말|답장|카톡)?\s*(?:을|를)?\s*(?:받|수신|전달받|읽)")
+NEGATION_AFTER_RE = re.compile(r"\s*(?:아니|않|안\s|못|말고|없)")
+ELISION_RE = re.compile(r"\(중략\)|\(후략\)|…|\.\.\.")
+KAKAO_PC_RE = re.compile(r"^\s*\[([^\]]{1,20})\]\s*\[(?:오전|오후)?\s*\d{1,2}:\d{2}(?::\d{2})?\]\s*(.+)$")
+KAKAO_PC_DATE_RE = re.compile(r"^-{3,}\s*(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일")
+KAKAO_PC_TIME_RE = re.compile(r"^\s*\[[^\]]{1,20}\]\s*\[(오전|오후)?\s*(\d{1,2}):(\d{2})")
+REPORT_DATE_CELL_RE = re.compile(r"^(\d{4})[-.](\d{1,2})[-.](\d{1,2})\.?$")
+REPORT_TIME_CELL_RE = re.compile(r"^(\d{1,2}):(\d{2})(?::\d{2})?$")
+META_TIME_RE = re.compile(r"(?:수집|분석|작성|출력|보고|추출|검토|발행|접수|회신)\s*(?:일시|시각|일자|날짜)")
+EXAMINER_DUR_RE = re.compile(r"소요|걸렸|걸린|작업\s*시간|분석\s*시간")
+MONEY_COMPOUND_RE = re.compile(r"(?<![\d.,])(\d+)\s?억\s?(?:(\d+)\s?(천만|백만|만)\s?)?원")
+EVIDENCE_TAG_RE = re.compile(r"<evidence(?:\s[^>]*)?>(.*?)</evidence>", re.IGNORECASE | re.DOTALL)
+EVENT_COUNT_RE = re.compile(r"송금|입금|이체|결제|출금|환불|접속|로그인|삭제|전송|통화|방문|실행|다운로드|업로드|폭행|협박")
+COUNT_RE = re.compile(
+    r"(?<![A-Za-z\d.,제])(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s?"
+    r"(%|건|개(?![월년])|회(?![사의원신차])|통(?![화장신보])|명(?![의령시확백])|차례|시간(?![대표])|분간|초간|"
+    r"KB|MB|GB|TB|바이트|페이지|프레임)(?![가-힣]*호증)"
+)
+MONEY_RE = re.compile(r"(?<![A-Za-z\d.,억])(?<!억 )(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s?(억|천만|백만|만|천)?\s?원(?![고본래문인칙장활형])")
+MONEY_MULT = {"억": 10**8, "천만": 10**7, "백만": 10**6, "만": 10**4, "천": 10**3, None: 1, "": 1}
+UNIT_KEYS = {
+    "명": r"speaker|person|people|participant|user|member|sender|명|인원|화자|참여|사람",
+    "%": r"pct|percent|ratio|rate|share|비율|율|%",
+    "size": r"size|byte|kb|mb|gb|tb|용량|크기",
+    "페이지": r"page|페이지|쪽",
+    "프레임": r"frame|프레임",
+    "dur": r"duration|sec|min|hour|time|length|시간|길이",
+    "count": r"count|total|num|^n$|_n$|message|msg|call|item|file|hit|record|row|entr|event|chat|photo|image|utter|deposit|withdraw|건|개|통|회|수",
+}
+UNIT_CLASS = {"명": "명", "%": "%", "KB": "size", "MB": "size", "GB": "size", "TB": "size", "바이트": "size",
+              "페이지": "페이지", "프레임": "프레임", "시간": "dur", "분간": "dur", "초간": "dur"}
+INLINE_TAG_RE = re.compile(r"</?(?:a|abbr|b|cite|code|em|font|i|mark|s|small|span|strong|sub|sup|u)\b[^>]*>", re.IGNORECASE)
+TAG_RE = re.compile(r"<(?!/?evidence\b)[a-zA-Z/][^>]*>", re.IGNORECASE)
+SPEAKER_LINE_RE = re.compile(r"(?:^|[,\]\)]\s*)([가-힣A-Za-z][가-힣A-Za-z0-9 ]{0,14}?)\s*:\s*(.+)$")
+ABSTAIN_RE = re.compile(r"미확인|미측정|INSUFFICIENT_DATA|UNVERIFIED|판단\s*불능|발견되지\s*않|확인되지\s*않|확인할\s*수\s*없")
+ASSERT_END_RE = re.compile(r"다(?:[.)\]\s,(]|$)|(?:함|음|임)(?=[\s.)(\]]|$)")
+HEDGE_WINDOW = 25
+CLAUSE_BREAK_RE = re.compile(r"[았었였했냈갔왔봤줬주하]고\s|[았었였했냈]으며\s|지만\s")
+APPROX_TIME_RE = re.compile(r"\d\s*(?:시|분|:\d{2})\s*(?:경|쯤|무렵|전후|께)")
+APPROX_MINUTES = 60
+MIN_QUOTE_CHARS = 4
+SPEAKER_MARK = r"\s*(?:께서|에게서|한테서|로부터|은|는|이|가)(?![가-힣])|\s*[:：]|\s*[,]?\s*(?=[\"“「『‘'《〈])"
+HHMM_RE = re.compile(r"\d{1,2}\s*(?::\d{2}|시)")
+DOT_DT_RE = re.compile(r"(?<!\d)(\d{4})\s*[./]\s*(\d{1,2})\s*[./]\s*(\d{1,2})\.?\s*(?:\([^)]{1,3}\)\s*)?(오전|오후)?\s*(\d{1,2}):(\d{2})(?!\d)")
+DUR_MS_RE = re.compile(r"(?<!\d)(\d{1,3})\s*분\s*(\d{1,2})\s*초")
+COUNT_TOPICS = [
+    (r"발화|발언", r"utter|speech|발화|발언"),
+    (r"입금", r"deposit|credit|입금"),
+    (r"출금|송금|이체", r"withdraw|debit|transfer|출금|송금|이체"),
+    (r"내역|거래|행", r"row|record|transaction|entr|내역|거래"),
+    (r"파일|첨부", r"file|attach|파일|첨부"),
+    (r"메시지|문자|카톡|대화", r"message|msg|chat|sms|메시지|대화"),
+    (r"통화", r"call|통화"),
+    (r"사진|이미지", r"photo|image|img|사진"),
+    (r"화자|참여자|인원|참석", r"speaker|participant|person|people|member|화자|인원"),
+]
+
+
+def dot_times(text: str) -> set[str]:
+    """'2026. 9. 14. 오후 3:12'(카카오톡 iOS)·'2026.03.12 14:30' 같은 점 구분 시각을 'YYYY-MM-DD HH:MM'로."""
+    out = set()
+    for m in DOT_DT_RE.finditer(text):
+        y, mo, d, ampm, h, mi = m.groups()
+        hour = int(h)
+        if ampm == "오후" and hour < 12:
+            hour += 12
+        elif ampm == "오전" and hour == 12:
+            hour = 0
+        out.add(f"{int(y):04d}-{int(mo):02d}-{int(d):02d} {hour:02d}:{mi}")
+    return out
+YEARLESS_RE = re.compile(r"(?<!\d)(\d{1,2})월\s*(\d{1,2})일\s*(?:(오전|오후)\s*)?(\d{1,2})(?::(\d{2})|\s*시(?:\s*(\d{1,2})\s*분)?)")
+TITLE_END_RE = re.compile(r"(?:법|법률|시행령|시행규칙|령|규칙|규정|조례|협약|지침|기준|가이드라인)$")
+TABLE_SPEAKER_COL = re.compile(r"화자|발신|발언자|작성자|송신|보낸|이름|speaker|sender|from|name", re.IGNORECASE)
+TABLE_NOT_TEXT_COL = re.compile(r"요약|설명|비고|분석|의미|평가|해석|summary|note", re.IGNORECASE)
+ABSENCE_RE = re.compile(r"없[다었음는]|존재하지\s*않|부존재|흔적\s*(?:이\s*)?없|사용하지\s*않|기록되지\s*않|확인되지\s*않|발견되지\s*않|미사용|(?<!\d)0\s*건")
+WHOLE_RE = re.compile(r"(?:모든|전체|전부|전수)\s*(?:사용\s*)?(?:기록|이력|로그|소스|사용기록)")
+WHOLE_NEGATED_RE = re.compile(r"(?:대표하지|해당하지|포함하지|담지)\s*(?:않|못)|아니")
+COVERAGE_HEDGE_RE = re.compile(r"미확인|권한|제외|DENIED|ERROR|SKIPPED|수집\s*못|수집하지\s*못|읽지\s*못")
+TABLE_TEXT_COL = re.compile(r"발언|메시지|대화|원문|인용|진술|내용|본문|utterance|message|text", re.IGNORECASE)
+
+
+def norm(s: str) -> str:
+    s = unicodedata.normalize("NFC", html.unescape(s))
+    s = re.sub(r"[‘’'`]", "'", s)
+    s = re.sub(r"[“”\"]", '"', s)
+    s = re.sub(r"\s+", " ", s)
+    return s.strip().strip(" .,!?…~").strip()
+
+
+def _read_text(path: Path) -> str:
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    suf = path.suffix.lower()
+    if suf in {".html", ".htm", ".xml"}:
+        raw = re.sub(r"<[^>]+>", " ", raw)
+    elif suf in {".vtt", ".srt"}:
+        # WebVTT/SRT: 인라인 타임태그(<00:00:32.320><c> 등)를 제거하고 롤링 중복 행을 제거한 본문과 원본 시각을 함께 보존
+        dedup_lines: list[str] = []
+        for ln in raw.splitlines():
+            s = re.sub(r"<[^>]+>", "", ln).strip()
+            if not s or s.startswith(("WEBVTT", "Kind:", "Language:", "NOTE")) or "-->" in s or s.isdigit():
+                continue
+            if not dedup_lines or s != dedup_lines[-1]:
+                dedup_lines.append(s)
+        raw = raw + "\n" + "\n".join(dedup_lines)
+    return raw
+
+
+def collect_sources(paths: list[str]) -> tuple[list[Path], dict[str, str]]:
+    files: list[Path] = []
+    for p in paths:
+        pp = Path(p)
+        if pp.is_dir():
+            files.extend(sorted(f for f in pp.rglob("*") if f.is_file() and not f.name.startswith(".")))
+        elif pp.is_file():
+            files.append(pp)
+    texts = {str(f): _read_text(f) for f in files if f.suffix.lower() in TEXT_EXTS}
+    return files, texts
+
+
+def speaker_index(texts: dict[str, str]) -> list[tuple[str, str, frozenset[str]]]:
+    """(화자, 정규화 발언, 그 줄의 분 단위 시각) 목록."""
+    rows = []
+    for t in texts.values():
+        day = ""  # 카카오톡 PC 내보내기는 날짜를 구분선 줄에만 적고, 발언 줄에는 '[오후 3:33]'만 둔다.
+        for line in t.splitlines():
+            if len(line) > 2000:
+                continue
+            dm = KAKAO_PC_DATE_RE.match(line)
+            if dm:
+                day = f"{int(dm.group(1)):04d}-{int(dm.group(2)):02d}-{int(dm.group(3)):02d}"
+                continue
+            if ":" not in line and "：" not in line and not line.lstrip().startswith("["):
+                continue
+            m = KAKAO_PC_RE.match(line) or SPEAKER_LINE_RE.search(line)
+            if m:
+                times = {ts[:16] for ts in extract_timestamps(line) if " " in ts} | dot_times(line)
+                tm = KAKAO_PC_TIME_RE.match(line)
+                if tm and day:
+                    hour = int(tm.group(2))
+                    if tm.group(1) == "오후" and hour < 12:
+                        hour += 12
+                    elif tm.group(1) == "오전" and hour == 12:
+                        hour = 0
+                    times.add(f"{day} {hour:02d}:{tm.group(3)}")
+                rows.append((m.group(1).strip(), norm(m.group(2)), frozenset(times)))
+    return rows
+
+
+def _num(v: Any) -> str | None:
+    if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+        return None
+    try:
+        f = float(str(v).replace(",", ""))
+    except ValueError:
+        return None
+    return str(int(f)) if f == int(f) else str(f)
+
+
+def structured_values(texts: dict[str, str]) -> list[tuple[str, str]]:
+    """집계 산출물(JSON/JSONL/CSV/TSV)의 (키 경로, 숫자 값) 목록."""
+    out: list[tuple[str, str]] = []
+
+    def walk(node: Any, key: str) -> None:
+        if isinstance(node, dict):
+            for k, v in node.items():
+                walk(v, f"{key}.{k}" if key else str(k))
+        elif isinstance(node, list):
+            for v in node:
+                walk(v, key)
+        else:
+            n = _num(node)
+            if n is not None:
+                out.append((key.lower(), n))
+
+    for name, t in texts.items():
+        suf = Path(name).suffix.lower()
+        if suf == ".json":
+            try:
+                walk(json.loads(t), "")
+            except ValueError:
+                pass
+        elif suf == ".jsonl":
+            for line in t.splitlines():
+                try:
+                    walk(json.loads(line), "")
+                except ValueError:
+                    continue
+        elif suf in {".csv", ".tsv"}:
+            rows = list(csv.reader(io.StringIO(t), delimiter="\t" if suf == ".tsv" else ","))
+            if rows:
+                header = [h.strip().lower() for h in rows[0]]
+                for r in rows[1:]:
+                    for h, cell in zip(header, r):
+                        n = _num(cell.strip())
+                        if n is not None:
+                            out.append((h, n))
+    return out
+
+
+def _count_grounded(num: str, unit: str, corpus: str, struct: list[tuple[str, str]], line: str = "") -> bool:
+    n, u = re.escape(num), re.escape(unit)
+    if re.search(rf"(?<![\d.]){n}(?![\d]|\.\d)\s?{u}", corpus, re.IGNORECASE):
+        return True
+    topics = [k for noun, k in COUNT_TOPICS if re.search(noun, line)] if UNIT_CLASS.get(unit, "count") in ("count", "명") else []
+    keys = re.compile("|".join(topics) if topics else UNIT_KEYS[UNIT_CLASS.get(unit, "count")], re.IGNORECASE)
+    target = _num(num)
+    return any(v == target and keys.search(k.split(".")[-1] or k) for k, v in struct)
+
+
+def money_values(text: str) -> tuple[set[int], list[tuple[int, int, int, str]]]:
+    """금액 표기를 원 단위 정수로 바꾼 값 집합과 (값, 시작, 끝, 원문) 목록. '1억 2천만원'은 하나의 금액이다."""
+    found: list[tuple[int, int, int, str]] = []
+    for m in MONEY_COMPOUND_RE.finditer(text):
+        value = int(m.group(1)) * 10**8 + (int(m.group(2)) * MONEY_MULT[m.group(3)] if m.group(2) else 0)
+        found.append((value, m.start(), m.end(), m.group(0)))
+    for m in MONEY_RE.finditer(text):
+        if any(s <= m.start() < e for _, s, e, _ in found):
+            continue
+        value = int(round(float(m.group(1).replace(",", "")) * MONEY_MULT[m.group(2)]))
+        found.append((value, m.start(), m.end(), m.group(0)))
+    return {v for v, _, _, _ in found}, found
+
+
+def _money_grounded(value: int, corpus_money: set[int], corpus: str, struct: list[tuple[str, str]]) -> bool:
+    if value in corpus_money or re.search(rf"(?<![\d.]){value}(?![\d])", corpus):
+        return True
+    return any(v == str(value) for _, v in struct)
+
+
+def _hedged(line: str, start: int, end: int) -> bool:
+    """항목 뒤에 단정 어미 없이 미확인이 오거나, '미확인:' 라벨 뒤에 있으면 유보다."""
+    for m in ABSTAIN_RE.finditer(line):
+        between = line[end:m.start()]
+        if end <= m.start() <= end + HEDGE_WINDOW and not ASSERT_END_RE.search(between) and not CLAUSE_BREAK_RE.search(between):
+            return True
+        if m.end() <= start and re.match(r"[^:：]{0,12}[:：]", line[m.end():start]):
+            return True
+    return False
+
+
+def _report_times(line: str) -> tuple[set[str], set[str]]:
+    """(연도 포함 'YYYY-MM-DD HH:MM', 연도 없는 'MM-DD HH:MM')."""
+    full = {ts[:16] for ts in extract_timestamps(line) if " " in ts} | dot_times(line)
+    # 표에서 날짜와 시각이 다른 칸에 있는 행('| 2026-10-03 | 15:33 | 김민수 | … |')도 한 시각으로 본다.
+    if line.lstrip().startswith("|"):
+        cells = [c.strip().strip("`*") for c in line.strip().strip("|").split("|")]
+        dates = [m for m in (REPORT_DATE_CELL_RE.match(c) for c in cells) if m]
+        hhmm = [m for m in (REPORT_TIME_CELL_RE.match(c) for c in cells) if m]
+        if len(dates) == 1 and len(hhmm) == 1:
+            y, mo, d = (int(x) for x in dates[0].groups())
+            full.add(f"{y:04d}-{mo:02d}-{d:02d} {int(hhmm[0].group(1)):02d}:{hhmm[0].group(2)}")
+    yearless = set()
+    for m in YEARLESS_RE.finditer(line):
+        if re.search(r"\d{4}\s*년\s*$", line[: m.start()]):
+            continue
+        mo, d, ampm, h, mi1, mi2 = m.groups()
+        hour = int(h)
+        if ampm == "오후" and hour < 12:
+            hour += 12
+        elif ampm == "오전" and hour == 12:
+            hour = 0
+        yearless.add(f"{int(mo):02d}-{int(d):02d} {hour:02d}:{int(mi1 or mi2 or 0):02d}")
+    return full, yearless
+
+
+def _near(ts: str, pool: set[str]) -> bool:
+    """'경/쯤' 같은 어림 시각: 같은 날짜에 APPROX_MINUTES 안의 원본 시각이 있으면 근거가 있다."""
+    d, hm = ts.rsplit(" ", 1)
+    mins = int(hm[:2]) * 60 + int(hm[3:5])
+    for p in pool:
+        pd, phm = p.rsplit(" ", 1)
+        if pd == d and abs(int(phm[:2]) * 60 + int(phm[3:5]) - mins) <= APPROX_MINUTES:
+            return True
+    return False
+
+
+def _skip_quote(q: str, line: str, start: int, end: int) -> bool:
+    if TITLE_END_RE.search(q.strip()) or re.match(r"\s*제\s*\d+\s*조", line[end:]):
+        return True
+    if re.search(r"이하\s*$", line[:start]):
+        return True
+    return bool(re.match(r"\s*(?:이?라\s*(?:한다|칭한다|함)|이?라고\s*(?:한다|칭한다))", line[end:]))
+
+
+def _clean_report(text: str) -> tuple[list[str], set[int]]:
+    if re.search(r"<[a-zA-Z/][^>]*>", text):
+        text = re.sub(
+            r"<(?:style|script)\b[^>]*>[\s\S]*?</(?:style|script)>",
+            lambda m: "\n" * m.group(0).count("\n"),
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(r"</?q\b[^>]*>", '"', text, flags=re.IGNORECASE)
+        text = re.sub(r"<code\b[^>]*>(.*?)</code>", r"`\1`", text, flags=re.IGNORECASE)
+        text = html.unescape(TAG_RE.sub(" ", INLINE_TAG_RE.sub("", text)))
+    lines = text.splitlines()
+    fenced: set[int] = set()
+    inside = False
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("```"):
+            inside = not inside
+            fenced.add(i)
+            lines[i] = ""
+        elif inside:
+            fenced.add(i)
+    def code_span(m: re.Match[str]) -> str:
+        inner = m.group(1)
+        if BARE_FILE_RE.fullmatch(inner.strip()):
+            return inner
+        if re.search(r"[가-힣]", inner) and not re.search(r"[/\\=$]|--|\.\w{1,5}\b|\b(?:python|node|bash|scripts)\b", inner):
+            return inner
+        return ""
+
+    lines = [ln if i in fenced else re.sub(r"`([^`\n]*)`", code_span, ln) for i, ln in enumerate(lines)]
+    return lines, fenced
+
+
+def _quote_items(i: int, lines: list[str], fenced: set[int], speakers_by_len: list[str], table: dict[str, Any]):
+    """(인용, 시작, 끝, 명시 화자, 문맥 줄) 목록."""
+    line = lines[i]
+    items = []
+    if i not in fenced:
+        for k, rx in enumerate(QUOTE_RES):
+            for m in rx.finditer(line):
+                q = m.group(1)
+                if k in SINGLE_QUOTE_IDX and not (re.search(r"[가-힣]", q) and SPEECH_AFTER_RE.match(line[m.end():])):
+                    continue
+                if not _skip_quote(q, line, m.start(), m.end()):
+                    items.append((q, m.start(), m.end(), None, line))
+        items += [(m.group(1), m.start(), m.end(), None, line) for m in EVIDENCE_TAG_RE.finditer(line)]
+        if line.count('"') % 2 == 1 or line.count("“") > line.count("”"):
+            joined = line
+            for j in range(i + 1, min(i + 4, len(lines))):
+                joined += " " + lines[j]
+                if joined.count('"') % 2 == 0 and joined.count("“") <= joined.count("”"):
+                    break
+            for rx in QUOTE_RES[:2]:
+                for m in rx.finditer(joined):
+                    if m.start() < len(line) < m.end():
+                        items.append((m.group(1), m.start(), m.end(), None, joined))
+    tm = HHMM_RE.search(line)
+    if i in fenced or line.lstrip().startswith(">") or tm:
+        for s in speakers_by_len:
+            m = re.search(r"(?:^|[\s,\]\)>|])" + re.escape(s) + r"\s*[:：]\s*(.+?)\s*\|?\s*$", line)
+            if m and (i in fenced or line.lstrip().startswith(">") or (tm is not None and tm.start() < m.start(1))):
+                utt = m.group(1)
+                if not QUOTE_CHARS_RE.search(utt):
+                    items.append((utt, m.start(1), m.end(1), s, line))
+                break
+    cells = [c.strip() for c in line.strip().strip("|").split("|")] if line.strip().startswith("|") else None
+    if cells and table.get("text") is not None and len(cells) > table["text"]:
+        utt = cells[table["text"]]
+        spk = cells[table["speaker"]] if len(cells) > table["speaker"] else ""
+        if utt and not QUOTE_CHARS_RE.search(utt):
+            pos = line.find(utt)
+            items.append((utt, pos, pos + len(utt), spk if spk in speakers_by_len else None, line))
+    return items
+
+
+def coverage_sources(texts: dict[str, str]) -> list[dict[str, Any]]:
+    """coverage.json 의 모든 소스(라벨, 상태, 건수, 별칭 정규식)."""
+    out = []
+    for name, t in texts.items():
+        if Path(name).name != "coverage.json":
+            continue
+        try:
+            srcs = json.loads(t).get("sources", [])
+        except (ValueError, AttributeError):
+            continue
+        for s in srcs:
+            if isinstance(s, dict) and s.get("match"):
+                rx = re.compile(rf"(?<![A-Za-z])(?:{s['match']})(?![A-Za-z])", re.IGNORECASE)
+                out.append({"label": s.get("label", s.get("id")), "status": s.get("status"), "rows": _num(s.get("rows")), "re": rx})
+    return out
+
+
+def check(report_text: str, source_paths: list[str], timeline_text: str = "") -> dict[str, Any]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    files, texts = collect_sources(source_paths)
+    corpus = norm("\n".join(texts.values()))
+    value_texts = {k: v for k, v in texts.items() if Path(k).name != "coverage.json"}
+    corpus_digits = re.sub(r"(?<=\d),(?=\d{3})", "", "\n".join(value_texts.values()) + "\n" + timeline_text)
+    struct = structured_values(value_texts)
+    corpus_money, _ = money_values(corpus_digits)
+    speakers = speaker_index(texts)
+    known_speakers = {s for s, _, _ in speakers}
+    speakers_by_len = sorted(known_speakers, key=len, reverse=True)
+    all_text = "\n".join(texts.values()) + "\n" + timeline_text
+    source_times = {ts[:16] for ts in extract_timestamps(all_text) if " " in ts} | dot_times(all_text)
+    source_times |= {t for _, _, ts in speakers for t in ts}  # 카카오톡 PC 내보내기처럼 날짜가 구분선에만 있는 발언 시각
+    source_yearless = {ts[5:16] for ts in source_times}
+    basenames = {unicodedata.normalize("NFC", f.name).lower() for f in files}
+    coverage = coverage_sources(texts)
+    missing = [s for s in coverage if s["status"] not in ("OK", "ABSENT")]
+
+    lines, fenced = _clean_report(report_text)
+    quotes_checked = 0
+    # 원본과 대조해 맞은 표 행의 화자. '총 6건', '김민수: 4건' 같은 건수는 이 행 수로 대조한다(Windows QA 2026-11-02:
+    # 정답 보고서가 집계 JSON 이 없다는 이유로 '근거 없는 수치'로 FAIL 했다).
+    table_verified: list[str] = []
+    seen_rows: set[str] = set()
+    table: dict[str, Any] = {}
+    for idx, line in enumerate(lines):
+        ln = idx + 1
+        stripped = line.strip()
+        if stripped.startswith("|") and idx + 1 < len(lines) and re.match(r"^\|?\s*:?-{3,}", lines[idx + 1].strip()):
+            heads = [c.strip() for c in stripped.strip("|").split("|")]
+            sc = next((k for k, h in enumerate(heads) if TABLE_SPEAKER_COL.search(h)), None)
+            tc = next((k for k, h in enumerate(heads) if TABLE_TEXT_COL.search(h) and not TABLE_NOT_TEXT_COL.search(h) and k != sc), None)
+            table = {"speaker": sc, "text": tc} if sc is not None and tc is not None else {}
+            continue
+        if stripped.startswith("|") and re.match(r"^\|?\s*:?-{3,}", stripped):
+            continue
+        if not stripped.startswith("|"):
+            table = {}
+
+        def unsupported(msg: str, start: int, end: int, ctx: str = line) -> None:
+            if _hedged(ctx, start, end):
+                warnings.append(f"{msg} (미확인으로 유보한 항목 — 원본 근거 없음을 본문에 밝혔는지 확인)")
+            else:
+                errors.append(msg)
+
+        full_times, yearless_times = _report_times(line)
+        for q, start, end, explicit, ctx in _quote_items(idx, lines, fenced, speakers_by_len, table):
+            nq = norm(re.sub(r"<[^>]+>", "", q))
+            if len(nq.replace(" ", "")) < MIN_QUOTE_CHARS:
+                continue
+            quotes_checked += 1
+            if not texts:
+                continue
+            parts = [p.strip() for p in ELISION_RE.split(nq) if len(p.strip().replace(" ", "")) >= 2]
+            if not parts or any(p not in corpus for p in parts):
+                unsupported(f"L{ln} 원본에 없는 인용: \"{nq[:40]}\" — 자료 폴더의 어떤 텍스트에도 이 문장이 없다(지어낸 발언/요약을 인용부호로 쓰지 말 것)", start, end, ctx)
+                continue
+            nq = max(parts, key=len)
+            part_said = [{s for s, utt, _ in speakers if p in utt or (utt in p and len(utt) >= MIN_QUOTE_CHARS)} for p in parts]
+            if len(parts) > 1 and all(part_said) and not set.intersection(*part_said):
+                errors.append(f"L{ln} 생략 인용이 서로 다른 화자의 발언을 이어 붙였다: \"{nq[:30]}\" — 화자별로 나눠 인용할 것")
+                continue
+            hits = [(s, t) for s, utt, t in speakers if nq in utt or (utt in nq and len(utt) >= MIN_QUOTE_CHARS)]
+            if any(NEGATION_AFTER_RE.match(utt[utt.find(nq) + len(nq):]) for _, utt, _ in speakers if nq in utt) and len(parts) == 1:
+                errors.append(f"L{ln} 부분 인용으로 뜻이 바뀔 수 있다: \"{nq[:30]}\" 뒤에 원문에서는 부정이 이어진다 — 부정까지 인용할 것")
+            said_by = {s for s, _ in hits}
+            src_times = set().union(*(t for _, t in hits)) if hits else set()
+            if src_times and full_times and not (full_times & src_times):
+                errors.append(f"L{ln} 시각-발언 불일치: \"{nq[:30]}\" 의 원본 시각은 {sorted(src_times)} 인데 보고서는 {sorted(full_times)} 로 적었다")
+            if not said_by:
+                continue
+            if explicit:
+                wrong = {explicit} - said_by
+            else:
+                named = {s for s in known_speakers if s in ctx}
+                if not named:
+                    continue
+                if RECIPIENT_RE.match(ctx[end:]):
+                    claimed = {s for s in named if re.search(re.escape(s) + r"\s*(?:로부터|에게서|한테서)", ctx)}
+                    if not claimed:
+                        continue
+                elif len(named) == 1:
+                    claimed = named
+                else:
+                    pos: dict[str, int] = {}
+                    for s in named:
+                        for mm in re.finditer(re.escape(s) + f"(?:{SPEAKER_MARK})", ctx):
+                            if mm.start() < start:
+                                pos[s] = max(pos.get(s, -1), mm.start())
+                    claimed = {max(pos, key=lambda k: pos[k])} if pos else set()
+                if claimed:
+                    wrong = claimed - said_by if not (claimed & said_by) else set()
+                else:
+                    wrong = named if not (named & said_by) else set()
+            if wrong:
+                errors.append(f"L{ln} 화자 불일치: \"{nq[:30]}\" 은 원본에서 {sorted(said_by)} 의 발언인데 보고서는 {sorted(wrong)} 로 적었다")
+            elif explicit and re.sub(r"\s+", " ", line.strip()) not in seen_rows:
+                # 같은 행을 복사해 건수를 부풀리지 못하게 한 번만 센다. 같은 말을 다른 시각에 다시 한 것은 다른 행이다
+                # (실제 카톡: 김민수 '내일까지 300만원 보내줘' 09:07·15:33).
+                seen_rows.add(re.sub(r"\s+", " ", line.strip()))
+                table_verified.append(explicit)
+        if not texts or idx in fenced:
+            continue
+        if missing:
+            if ABSENCE_RE.search(line):
+                for s in missing:
+                    am = s["re"].search(line)
+                    if am and not COVERAGE_HEDGE_RE.search(line[am.start(): am.end() + HEDGE_WINDOW]):
+                        errors.append(f"L{ln} 수집하지 못한 소스의 부재 단정: {s['label']}({s['status']}) — 읽지 못한 기록은 '없음'이 아니라 '미확인(권한 없음 등)'으로 적을 것")
+            wm = WHOLE_RE.search(line)
+            if wm and not COVERAGE_HEDGE_RE.search(line) and not WHOLE_NEGATED_RE.search(line[wm.end():]):
+                errors.append(f"L{ln} 전체 검토 주장: 수집하지 못한 소스가 있다({', '.join(s['label'] + '=' + s['status'] for s in missing)}) — 범위를 줄여 쓰거나 빠진 소스를 밝힐 것")
+        tpos = HHMM_RE.search(line)
+        tstart, tend = (tpos.start(), tpos.end()) if tpos else (0, 0)
+        if META_TIME_RE.search(line):
+            full_times, yearless_times = set(), set()
+        if APPROX_TIME_RE.search(line):
+            full_times = {t for t in full_times if not _near(t, source_times)}
+            yearless_times = {t for t in yearless_times if not _near(t, source_yearless)}
+        for ts in sorted(full_times - source_times):
+            unsupported(f"L{ln} 원본/타임라인에 없는 시각: {ts} — 근거 자료의 시각만 쓸 것", tstart, tend)
+        for ts in sorted(yearless_times - source_yearless):
+            unsupported(f"L{ln} 원본/타임라인에 없는 시각: {ts}(연도 없음) — 근거 자료의 시각만 쓸 것", tstart, tend)
+        for m in COUNT_RE.finditer(line):
+            num = m.group(1).replace(",", "")
+            if UNIT_CLASS.get(m.group(2)) == "dur" and EXAMINER_DUR_RE.search(line):
+                continue
+            if re.search(r"파일", line) and m.group(2) in ("개", "건") and num == str(len(files)):
+                continue
+            if any(s["status"] == "OK" and s["rows"] == num and s["re"].search(line) for s in coverage):
+                continue
+            # 표 행 수는 '메시지 몇 건'의 근거일 뿐이다. '송금 2회', '입금 2건'처럼 사건·행위를 센 수는 표로 증명되지 않는다
+            # (적대적 리뷰 2026-11-03).
+            if m.group(2) in ("건", "개") and table_verified and not EVENT_COUNT_RE.search(line):
+                # 숫자 앞 같은 절('김민수: 4건', '박준호 1건')에 화자가 있으면 그 화자의 행 수, 없으면 전체 행 수와 대조한다
+                clause = re.split(r"[,(（|;/·]", line[: m.start()])[-1]
+                who = [s for s in set(table_verified) if s in clause]
+                if num == str(table_verified.count(who[0]) if len(who) == 1 else len(table_verified) if not who else -1):
+                    continue
+            if not _count_grounded(num, m.group(2), corpus_digits, struct, line):
+                unsupported(f"L{ln} 근거 없는 수치: {m.group(0).strip()} — 자료나 분석 산출물(집계 JSON 등)에 이 값이 없다", m.start(), m.end())
+        if not EXAMINER_DUR_RE.search(line):
+            for dm in DUR_MS_RE.finditer(line):
+                mm_i, ss_i = int(dm.group(1)), int(dm.group(2))
+                secs = str(mm_i * 60 + ss_i)
+                said = (
+                    re.sub(r"\s+", "", dm.group(0)) in re.sub(r"\s+", "", corpus_digits)
+                    or bool(re.search(rf"(?:^|\D)0?{mm_i}:{ss_i:02d}(?!\d)", corpus_digits))
+                )
+                if not said and not any(v == secs and re.search(UNIT_KEYS["dur"], k) for k, v in struct):
+                    unsupported(f"L{ln} 근거 없는 시간 길이: {dm.group(0)} — 자료나 분석 산출물에 이 값이 없다", dm.start(), dm.end())
+        for value, ms, me, raw in money_values(line)[1]:
+            if not _money_grounded(value, corpus_money, corpus_digits, struct):
+                unsupported(f"L{ln} 근거 없는 금액: {raw.strip()} — 자료에 이 금액이 없다", ms, me)
+        for fm in FILE_TOKEN_RE.finditer(line):
+            name = fm.group(1).strip().split("/")[-1].split("\\")[-1]
+            name = re.sub(r"^.*?[:：]\s*", "", name).strip()
+            tails = [name] + [name[sep.end():] for sep in re.finditer(r"[\s(\[]+", name)]
+            if all(unicodedata.normalize("NFC", t).lower() not in basenames for t in tails):
+                name = tails[-1]
+                unsupported(f"L{ln} 자료 폴더에 없는 파일: {name} — 첨부/증거로 적은 파일이 실제로 없다", fm.start(), fm.end())
+
+    body = "\n".join(lines)
+    has_claims = quotes_checked > 0 or bool(FILE_TOKEN_RE.search(body))
+    if has_claims and not texts:
+        if files:
+            errors.append(
+                "원본 텍스트 없음: 자료 폴더에 이미지·음성·PDF만 있어 인용을 대조할 수 없다 — OCR/STT/내보내기 텍스트를 자료 폴더에 함께 둘 것"
+            )
+        else:
+            errors.append(
+                "원본 자료 미제시: 보고서에 인용/첨부가 있으나 대조할 자료 폴더가 없다 — 보고서 옆 evidence/(또는 증거/, 자료/)에 원본을 두거나 --sources 로 지정할 것"
+            )
+    return {
+        "workspace_provenance": workspace_provenance(),
+        "sources": [str(f) for f in files],
+        "text_sources": list(texts),
+        "quotes_checked": quotes_checked,
+        "errors": errors,
+        "warnings": warnings,
+        "verdict": "FAIL" if errors else "PASS",
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    # Windows 기본 출력 인코딩(cp949)으로 나가면 UTF-8 로 읽는 호출자(훅·테스트)가 JSON 을 못 읽는다.
+    for stream in (sys.stdout, sys.stderr):
+        getattr(stream, "reconfigure", lambda **_: None)(encoding="utf-8", errors="replace")
+    ap = argparse.ArgumentParser(description="보고서-원본 자료 1:1 대조 (인용·화자·시각·건수·금액·첨부)")
+    ap.add_argument("report")
+    ap.add_argument("--sources", nargs="+", default=[], help="자료 폴더 또는 파일")
+    ap.add_argument("--timeline", help="타임라인 JSON (시각 대조 보강)")
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args(argv)
+    rp = Path(a.report)
+    if not rp.is_file():
+        print(f"report not found: {rp}", file=sys.stderr)
+        return 2
+    tl = Path(a.timeline).read_text(encoding="utf-8", errors="replace") if a.timeline and Path(a.timeline).is_file() else ""
+    res = check(rp.read_text(encoding="utf-8", errors="replace"), a.sources, tl)
+    if a.json:
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+    else:
+        print(provenance_text())
+        print(f"[{res['verdict']}] 인용 {res['quotes_checked']}건 대조, 자료 {len(res['sources'])}개")
+        for e in res["errors"]:
+            print(f"  - ERROR: {e}")
+        for w in res["warnings"]:
+            print(f"  - WARN: {w}")
+    return 1 if res["errors"] else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

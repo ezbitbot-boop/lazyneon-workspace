@@ -1,0 +1,25 @@
+# Core PDF / HWP features (required when using these parsers)
+pymupdf>=1.23,<2
+pypdf>=4.0,<7
+olefile>=0.47,<1
+hwp-hwpx-parser>=0.3,<2
+# Optional: Office document conversion
+firecrawl-anydoc==0.2.4
+# Required: Korean morphological grounding
+kiwipiepy>=0.20,<1
+# Optional: financial XLSX and crime schedules
+openpyxl>=3.1,<4
+# Optional: image / deepfake clues / charts (no authenticity guarantee)
+pillow>=10.0,<12
+numpy>=1.26,<3
+matplotlib>=3.8,<4
+# Optional: NTFS artifacts
+dissect.target>=3.15,<4
+# Optional: server STT; audio transmission requires explicit consent
+SpeechRecognition>=3.10,<4
+requests>=2.31,<3
+# Optional: video downloads / captions; FFmpeg and ffprobe are system dependencies
+# yt-dlp>=2024.1.0
+# Optional: OCR uses system Tesseract + language packs; EasyOCR may be installed separately
+# Development tests
+pytest>=7.0,<10

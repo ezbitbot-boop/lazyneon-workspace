@@ -1,0 +1,522 @@
+#!/usr/bin/env node
+import {isCoreOwned, dispatchTargets} from './hook_targets.mjs';
+import { pythonCandidates, isPythonLauncherStub } from './python_runtime.mjs';
+import { workspaceFromSources, resolveTarget } from './hook_workspace.mjs';
+let workspace = null;
+/**
+ * legal_factuality_guard.mjs — PostToolUse Legal and Precedent Hallucination Guard
+ * Inspects newly written legal drafts, ruling analyses, and legal texts for
+ * fabricated statute article numbers (e.g. 민법 제1500조) and fake precedents.
+ */
+import fs from "fs";
+import path from "path";
+import { spawnSync } from "child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import { stdin } from "node:process";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+// 완성된 JSON 은 조기 리졸브로 바로 끝나므로 상한은 호스트가 늦게 보낼 때만 쓰인다.
+// 50ms 일 때 늦게 온 입력을 버리고 통과(fail-open)시켜 1500ms 로 되돌렸다.
+const STDIN_WAIT_MS = 1500;
+
+function readStdin(limitMs = STDIN_WAIT_MS) {
+	return new Promise((resolve) => {
+		if (stdin.isTTY) {
+			resolve("");
+			return;
+		}
+		const chunks = [];
+		let settled = false;
+		const finish = (value) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			try { stdin.pause(); } catch {}
+			stdin.removeAllListeners();
+			resolve(value);
+		};
+		const timer = setTimeout(() => finish(Buffer.concat(chunks).toString("utf8")), limitMs);
+		if (typeof timer.unref === "function") timer.unref();
+		stdin.on("data", (chunk) => {
+			chunks.push(chunk);
+			const acc = Buffer.concat(chunks).toString("utf8").trim();
+			if ((acc.startsWith("{") && acc.endsWith("}")) || (acc.startsWith("[") && acc.endsWith("]"))) {
+				try {
+					JSON.parse(acc);
+					finish(acc);
+				} catch {}
+			}
+		});
+		stdin.on("end", () => finish(Buffer.concat(chunks).toString("utf8")));
+		stdin.on("error", () => finish(""));
+	});
+}
+
+function tryParseJson(text) {
+	if (!text) return undefined;
+	const t = text.trim();
+	if (!t.startsWith("{") && !t.startsWith("[")) return undefined;
+	try {
+		return JSON.parse(t);
+	} catch {
+		return undefined;
+	}
+}
+
+async function collectSources() {
+	const sources = [];
+	const push = (text, label) => {
+		if (text) sources.push({ text, parsed: tryParseJson(text), label });
+	};
+	for (const k of ["ANTIGRAVITY_TOOL_INPUT", "TOOL_INPUT", "ANTIGRAVITY_TARGET_FILE", "TARGET_FILE"]) {
+		if (process.env[k]) push(process.env[k], `env:${k}`);
+	}
+	push(await readStdin(STDIN_WAIT_MS), "stdin");
+	for (const arg of process.argv.slice(2)) push(arg, "argv");
+	return sources;
+}
+
+const WRITE_OR_CMD_TOOL_RE = /^(write_to_file|replace_file_content|multi_replace_file_content|run_command|WriteToFile|ReplaceFileContent|MultiReplaceFileContent|RunCommand|write_file|WriteFile|edit_file|EditFile|Write|Edit|MultiEdit|SearchReplace|StrReplace|Bash|bash|Shell|shell|execute_command)$/i;
+const TARGET_KEY_RE = /^(file_path|filepath|path|target|target_file|targetfile|target_path|targetpath|output|file|filename)$/i;
+const PATH_LIKE_RE = /([^\s"'`<>|;&]+[\/\\][^\s"'`<>|;&]+\.(?:md|html|txt|json))/i;
+const REDIRECT_RE = /(?:>|>>)\s*([^\s|&;]+(?:\.(?:md|html|txt|json)))/i;
+
+function unquoteTranscriptVal(val) {
+	if (typeof val !== "string") return val;
+	const t = val.trim();
+	if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) {
+		try {
+			const parsed = JSON.parse(t);
+			if (typeof parsed === "string") return parsed;
+		} catch {
+			return t.slice(1, -1);
+		}
+	}
+	return val;
+}
+
+function resolveTranscriptPaths(payloadOrPath) {
+	if (typeof payloadOrPath === "string") {
+		return resolveTranscriptPaths({ transcriptPath: payloadOrPath });
+	}
+	if (!payloadOrPath || typeof payloadOrPath !== "object") return [];
+	const candidates = [];
+	const add = (p) => {
+		if (typeof p === "string" && p.trim() && !candidates.includes(p.trim())) {
+			candidates.push(p.trim());
+		}
+	};
+	const tp = payloadOrPath.transcriptPath || payloadOrPath.transcript_path || "";
+	if (typeof tp === "string" && tp.trim()) {
+		add(tp);
+		if (/transcript\.jsonl$/i.test(tp) && !/transcript_full\.jsonl$/i.test(tp)) {
+			add(tp.replace(/transcript\.jsonl$/i, "transcript_full.jsonl"));
+		} else if (/transcript_full\.jsonl$/i.test(tp)) {
+			add(tp.replace(/transcript_full\.jsonl$/i, "transcript.jsonl"));
+		}
+	}
+	const adp = payloadOrPath.artifactDirectoryPath || payloadOrPath.artifact_directory_path || "";
+	if (typeof adp === "string" && adp.trim()) {
+		add(path.join(adp, ".system_generated", "logs", "transcript_full.jsonl"));
+		add(path.join(adp, ".system_generated", "logs", "transcript.jsonl"));
+		add(path.join(adp, "transcript_full.jsonl"));
+		add(path.join(adp, "transcript.jsonl"));
+	}
+	return candidates.filter((p) => {
+		try {
+			return fs.existsSync(p) && fs.statSync(p).isFile();
+		} catch {
+			return false;
+		}
+	});
+}
+
+function extractToolDataFromCall(tc) {
+	if (!tc || typeof tc !== "object") return null;
+	const toolName = unquoteTranscriptVal(tc.name || tc.tool_name || tc.toolName || tc.function?.name || "");
+	if (toolName && !WRITE_OR_CMD_TOOL_RE.test(toolName)) return null;
+	let rawArgs = tc.args ?? tc.arguments ?? tc.input ?? tc.parameters ?? tc.function?.arguments ?? tc;
+	if (typeof rawArgs === "string") {
+		rawArgs = tryParseJson(unquoteTranscriptVal(rawArgs)) ?? tryParseJson(rawArgs);
+	}
+	if (!rawArgs || typeof rawArgs !== "object") return null;
+
+	const getStr = (...keys) => {
+		for (const k of keys) {
+			if (typeof rawArgs[k] === "string" && rawArgs[k]) {
+				return unquoteTranscriptVal(rawArgs[k]);
+			}
+		}
+		return "";
+	};
+
+	let targetFile = getStr("TargetFile", "target_file", "file_path", "filepath", "Path", "path", "target", "target_path", "targetpath", "output", "file", "filename");
+	const commandLine = getStr("CommandLine", "command_line", "command", "cmd", "script");
+	let codeContent = getStr("CodeContent", "code_content", "ReplacementContent", "replacement_content", "Content", "content", "Replacement", "replacement", "new_string", "text");
+	if (!codeContent && rawArgs.ReplacementChunks !== undefined) {
+		let chunks = rawArgs.ReplacementChunks;
+		if (typeof chunks === "string") {
+			chunks = tryParseJson(unquoteTranscriptVal(chunks)) ?? tryParseJson(chunks);
+		}
+		if (Array.isArray(chunks)) {
+			codeContent = chunks
+				.map((c) => (c && typeof c === "object" ? unquoteTranscriptVal(c.ReplacementContent || c.replacement_content || c.content || "") : ""))
+				.filter(Boolean)
+				.join("\n");
+		}
+	}
+	if (!targetFile && commandLine) {
+		const red = commandLine.match(REDIRECT_RE);
+		if (red) targetFile = red[1];
+		else {
+			const m = commandLine.match(PATH_LIKE_RE);
+			if (m) targetFile = m[1];
+		}
+	}
+	if (!targetFile && !commandLine && !codeContent) return null;
+	return { toolName, targetFile, codeContent, commandLine };
+}
+
+function extractTargetFromNode(node, out) {
+	if (Array.isArray(node)) {
+		for (const item of node) extractTargetFromNode(item, out);
+		return;
+	}
+	if (!node || typeof node !== "object") return;
+	for (const [key, value] of Object.entries(node)) {
+		if (typeof value === "string" && value) {
+			if (key === "Target" && ("Path" in node || "Replacement" in node)) continue;
+			if (TARGET_KEY_RE.test(key)) out.push({ value, isCommand: false });
+			else if (/^(command|cmd|command_line|commandline|script|args)$/i.test(key)) out.push({ value, isCommand: true });
+		} else if (value && typeof value === "object") {
+			extractTargetFromNode(value, out);
+		}
+	}
+}
+
+// 마지막 줄이 32KB 창보다 길면(큰 쓰기 직후) 창 안에 완결된 줄이 없어 0줄이 된다.
+// 그때만 예전 상한(512KB)으로 한 번 더 읽는다.
+const TAIL_FALLBACK_BYTES = 512 * 1024;
+
+function readTailLines(filePath, maxLines = 5, maxBytes = 32 * 1024) {
+	const stat = fs.statSync(filePath);
+	let text;
+	if (stat.size <= maxBytes) {
+		text = fs.readFileSync(filePath, "utf8");
+	} else {
+		const fd = fs.openSync(filePath, "r");
+		let complete = true;
+		try {
+			const buf = Buffer.allocUnsafe(maxBytes);
+			fs.readSync(fd, buf, 0, maxBytes, stat.size - maxBytes);
+			const nlIdx = buf.indexOf(0x0a);
+			complete = nlIdx >= 0 && nlIdx < maxBytes - 1;
+			text = (nlIdx >= 0 ? buf.subarray(nlIdx + 1) : buf).toString("utf8");
+		} finally {
+			fs.closeSync(fd);
+		}
+		if (!complete && maxBytes < TAIL_FALLBACK_BYTES) return readTailLines(filePath, maxLines, TAIL_FALLBACK_BYTES);
+	}
+	return text.split(/\r?\n/).filter((l) => l.trim().length > 0).slice(-maxLines).reverse();
+}
+
+function extractFromTranscript(payloadOrPath) {
+	const paths = resolveTranscriptPaths(payloadOrPath);
+	const targetStepIdx =
+		payloadOrPath && typeof payloadOrPath === "object"
+			? typeof payloadOrPath.stepIdx === "number"
+				? payloadOrPath.stepIdx
+				: typeof payloadOrPath.step_index === "number"
+					? payloadOrPath.step_index
+					: undefined
+			: undefined;
+
+	for (const tp of paths) {
+		try {
+			const lines = readTailLines(tp, 5);
+			const parsedSteps = [];
+			let hasTruncatedToolCalls = false;
+			for (const line of lines) {
+				const step = tryParseJson(line);
+				if (!step || typeof step !== "object") continue;
+				if (Array.isArray(step.truncated_fields) && step.truncated_fields.includes("tool_calls")) {
+					hasTruncatedToolCalls = true;
+				}
+				parsedSteps.push({ step, line });
+			}
+			if (hasTruncatedToolCalls && paths.some((p) => p !== tp && /transcript_full\.jsonl$/i.test(p))) {
+				continue;
+			}
+
+			let matchedToolStep = false;
+			const searchSteps = (respectStepIdx) => {
+				for (const { step, line } of parsedSteps) {
+					const stepIdxVal = typeof step.step_index === "number" ? step.step_index : typeof step.stepIdx === "number" ? step.stepIdx : undefined;
+					if (respectStepIdx && targetStepIdx !== undefined && stepIdxVal !== undefined && stepIdxVal > targetStepIdx) {
+						continue;
+					}
+					const calls = Array.isArray(step.tool_calls)
+						? step.tool_calls
+						: Array.isArray(step.toolCalls)
+							? step.toolCalls
+							: step.toolCall && typeof step.toolCall === "object"
+								? [step.toolCall]
+								: [];
+					if (calls.length > 0) {
+						if (respectStepIdx) matchedToolStep = true;
+						if (respectStepIdx && targetStepIdx !== undefined && stepIdxVal !== undefined && targetStepIdx > stepIdxVal) {
+							const callOffset = targetStepIdx - stepIdxVal - 1;
+							if (callOffset >= 0 && callOffset < calls.length) {
+								const data = extractToolDataFromCall(calls[callOffset]);
+								return data && data.targetFile ? data : null;
+							}
+						}
+						for (let i = calls.length - 1; i >= 0; i -= 1) {
+							const data = extractToolDataFromCall(calls[i]);
+							if (data && data.targetFile) return data;
+						}
+						return null;
+					}
+					const directData = extractToolDataFromCall(step);
+					if (directData && directData.targetFile) return directData;
+					if (WRITE_OR_CMD_TOOL_RE.test(line)) {
+						const found = [];
+						extractTargetFromNode(step, found);
+						for (const { value, isCommand } of found) {
+							const u = unquoteTranscriptVal(value);
+							if (!isCommand && u) return { toolName: "", targetFile: u, codeContent: "", commandLine: "" };
+							if (isCommand && u) {
+								const red = u.match(REDIRECT_RE);
+								if (red) return { toolName: "run_command", targetFile: red[1], codeContent: "", commandLine: u };
+								const m = u.match(PATH_LIKE_RE);
+								if (m) return { toolName: "run_command", targetFile: m[1], codeContent: "", commandLine: u };
+							}
+						}
+					}
+				}
+				return null;
+			};
+
+			const hit = searchSteps(true) || (!matchedToolStep && targetStepIdx !== undefined ? searchSteps(false) : null);
+			if (hit) return hit;
+		} catch {
+			// continue to next candidate
+		}
+	}
+	return null;
+}
+
+function extractTarget(sources) {
+	const env = process.env.ANTIGRAVITY_TARGET_FILE || process.env.TARGET_FILE || "";
+	if (env) return env;
+	for (const s of sources) {
+		if (s.parsed !== undefined) {
+			if (s.parsed?.toolCall?.args?.TargetFile) return unquoteTranscriptVal(String(s.parsed.toolCall.args.TargetFile));
+			const found = [];
+			extractTargetFromNode(s.parsed, found);
+			for (const { value, isCommand } of found) {
+				const u = unquoteTranscriptVal(value);
+				if (!isCommand) return u;
+				const red = u.match(REDIRECT_RE);
+				if (red) return red[1];
+				const m = u.match(PATH_LIKE_RE);
+				if (m) return m[1];
+			}
+			if (
+				s.parsed &&
+				typeof s.parsed === "object" &&
+				(s.parsed.transcriptPath || s.parsed.transcript_path || s.parsed.artifactDirectoryPath || s.parsed.artifact_directory_path)
+			) {
+				const fromTranscript = extractFromTranscript(s.parsed);
+				if (fromTranscript && fromTranscript.targetFile) return fromTranscript.targetFile;
+			}
+		}
+	}
+	for (const s of sources) {
+		if (s.parsed !== undefined) continue;
+		const red = s.text.match(REDIRECT_RE);
+		if (red) return red[1];
+		const m = s.text.match(PATH_LIKE_RE);
+		if (m) return m[1];
+	}
+	return "";
+}
+
+const LEGAL_TRIGGER_RE = /소장|준비서면|고소장|내용증명|답변서|판결|판례|조문|민법|형법|법률|대법원|법원/;
+
+function isPluginInternalDoc(targetFile) {
+	try {
+		const abs = path.resolve(targetFile);
+		for (const pRoot of [path.resolve(root)]) {
+			if (!abs.startsWith(pRoot + path.sep)) continue;
+			const rel = path.relative(pRoot, abs).replace(/\\/g, "/");
+			if (/^(AGENTS\.md|GEMINI\.md|RULES\.md|_entry\.md|README\.md|CLAUDE\.md|CHARTER\.md|NOTICE|rules\/|docs\/|skills\/|agents\/|templates\/|contracts\/|enforced\/)/.test(rel)) {
+				return true;
+			}
+		}
+		return false;
+	} catch {
+		return false;
+	}
+}
+
+function isAgentInternalFile(targetFile) {
+    if (isCoreOwned(targetFile)) return true;
+    return Boolean(workspace && ['pins.md', 'ulw-scope.md', 'audit_trail.jsonl'].some(name => path.resolve(targetFile) === path.join(workspace, '.lazyneon-workspace', name)));
+}
+
+const READ_CAP_BYTES = 2 * 1024 * 1024;
+const TAIL_BYTES = 512 * 1024;
+
+function readSamples(filePath) {
+	try {
+		const stat = fs.statSync(filePath);
+		if (stat.size <= READ_CAP_BYTES) {
+			return [fs.readFileSync(filePath, "utf8")];
+		}
+		const fd = fs.openSync(filePath, "r");
+		try {
+			const headBuf = Buffer.alloc(READ_CAP_BYTES);
+			fs.readSync(fd, headBuf, 0, READ_CAP_BYTES, 0);
+			const tailLen = Math.min(TAIL_BYTES, stat.size - READ_CAP_BYTES);
+			const tailBuf = Buffer.alloc(tailLen);
+			fs.readSync(fd, tailBuf, 0, tailLen, stat.size - tailLen);
+			return [headBuf.toString("utf8"), tailBuf.toString("utf8")];
+		} finally {
+			fs.closeSync(fd);
+		}
+	} catch {
+		return [];
+	}
+}
+
+function shouldAudit(filePath) {
+	if (isPluginInternalDoc(filePath) || isAgentInternalFile(filePath)) return false;
+	if (!/\.(md|html|txt|json)$/i.test(filePath)) return false;
+	if (LEGAL_TRIGGER_RE.test(filePath)) return true;
+	if (fs.existsSync(filePath)) {
+		for (const chunk of readSamples(filePath)) {
+			if (LEGAL_TRIGGER_RE.test(chunk)) return true;
+		}
+	}
+	return false;
+}
+
+function sourceCandidate(targetFile) {
+	const dir = path.dirname(path.resolve(targetFile));
+	const candidates = [
+		join(dir, "facts.json"),
+		join(dir, "facts.md"),
+		join(dir, "facts.txt"),
+		join(dir, "evidence.json"),
+		join(dir, "evidence.txt"),
+		join(dir, "evidence.md"),
+		join(dir, "source.md"),
+		join(dir, "source.txt"),
+	];
+	return candidates.find((p) => fs.existsSync(p));
+}
+
+function ledgerCandidate(targetFile) {
+	const dir = path.dirname(path.resolve(targetFile));
+	const candidates = [
+		join(dir, "claim-ledger.md"),
+		join(dir, "claim_ledger.md"),
+		join(workspace || dir, "claim-ledger.md"),
+		join(workspace || dir, "claim_ledger.md"),
+	];
+	return candidates.find((p) => fs.existsSync(p));
+}
+
+function notChecked(detail) {
+    const reason = `[미확인] NOT_CHECKED: ${detail} — 검증 완료로 제출할 수 없습니다.`;
+    console.error(reason);
+    console.log(JSON.stringify({decision: 'block', status: 'NOT_CHECKED', reason}));
+    process.exit(1);
+}
+
+async function main() {
+	const sources = await collectSources();
+	workspace = workspaceFromSources(sources);
+	dispatchTargets(sources);
+	const targetFile = resolveTarget(extractTarget(sources), workspace);
+	if (targetFile && isCoreOwned(targetFile)) { console.log(JSON.stringify({status:'NOT_APPLICABLE'})); process.exit(0); }
+
+	if (!targetFile || !fs.existsSync(targetFile)) {
+		process.stdout.write(JSON.stringify({status:'NOT_APPLICABLE'})+'\n');
+		process.exit(0);
+	}
+	if (!shouldAudit(targetFile)) {
+		process.stdout.write(JSON.stringify({status:'NOT_APPLICABLE'})+'\n');
+		process.exit(0);
+	}
+
+	const verifyScript = join(root, "scripts", "verify_legal_factuality.py");
+	if (!fs.existsSync(verifyScript)) notChecked('verifier 스크립트 없음');
+
+	const srcFile = sourceCandidate(targetFile);
+	const ledgerFile = ledgerCandidate(targetFile);
+	const verifyArgs = [verifyScript, targetFile, "--json"];
+	if (srcFile) {
+		verifyArgs.push("--source", srcFile, "--morph-grounding");
+	}
+	if (ledgerFile) {
+		verifyArgs.push("--claim-ledger", ledgerFile);
+	}
+
+	const pyCandidates = pythonCandidates(root);
+	let res = null;
+	for (const { cmd, pre } of pyCandidates) {
+		const candidateRes = spawnSync(cmd, [...pre, ...verifyArgs], {
+			cwd: root,
+			encoding: "utf-8",
+			timeout: Math.min(25000, Math.max(1, Number(process.env.LAZYNEON_WS_VERIFY_TIMEOUT_MS) || 25000)),
+			windowsHide: true,
+		});
+		if (candidateRes.error && candidateRes.error.code !== 'ENOENT') {
+			console.error('[LEGAL FACTUALITY GUARD] [미확인] NOT_CHECKED: timeout/crash');
+			console.log(JSON.stringify({decision:'block', status:'NOT_CHECKED', code:'TIMEOUT', reason:'[미확인] timeout/crash'}));
+			process.exit(1);
+		}
+		const isWinStoreAlias = isPythonLauncherStub(candidateRes);
+		if (!candidateRes.error && !isWinStoreAlias) {
+			res = candidateRes;
+			break;
+		}
+	}
+
+	if (!res || res.error) notChecked('python 실행 불가');
+
+	if (res.status !== 0) {
+        let outcome;try {outcome=JSON.parse(res.stdout);}catch{}
+        if(outcome?.status==='NOT_CHECKED' && outcome?.status_codes?.includes('MORPH_UNAVAILABLE')) {
+            console.log(JSON.stringify({decision:'block',status:'NOT_CHECKED',code:'MORPH_UNAVAILABLE'}));
+            process.exit(1);
+        }
+        if(!outcome || !['FAIL','WARN','PASS'].includes(outcome.verdict)) notChecked('verifier crash/dependency failure without verdict');
+		let reason = "법률 사실관계 및 조문/판례 검증 실패";
+		try {
+			const data = JSON.parse(res.stdout);
+			if (data.errors && data.errors.length > 0) {
+				reason = data.errors.join("; ");
+			}
+		} catch {
+			reason = res.stderr || res.stdout || reason;
+		}
+		console.error(`[LEGAL FACTUALITY GUARD] FAIL_CLOSED: ${reason}`);
+		console.error(`[HINT] 허위 조문 번호(예: 민법 1118조 초과) 및 가짜 판례 번호를 수정하십시오.`);
+		process.stdout.write(JSON.stringify({ decision: "block", status:"FAIL", reason }) + "\n");
+		process.exit(1);
+	}
+
+    let verified;
+    try { verified = JSON.parse(res.stdout); } catch { notChecked('verifier 결과 없음/잘못된 출력'); }
+    if (!['PASS', 'WARN'].includes(verified?.verdict) || !Array.isArray(verified?.errors) || verified.errors.length) notChecked('verifier 성공 결과 없음');
+
+	process.stdout.write(JSON.stringify(verified.verdict==='WARN' && process.env.LAZYNEON_WS_SINGLE_TARGET==='1'?{status:'WARN'}:{status:'PASS'})+'\n');
+	process.exit(0);
+}
+
+main();

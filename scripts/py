@@ -1,0 +1,15 @@
+#!/bin/sh
+# py — venv 인지 python 리졸버 (POSIX)
+# 우선순위: $LAZYNEON_WS_PYTHON > $LAZYNEON_WS_LEGACY_PYTHON > $ROOT/.venv/bin/python > $HOME/.lazyneon-workspace/venv/bin/python > python3
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [ -n "${LAZYNEON_WS_PYTHON:-}" ]; then
+  exec "$LAZYNEON_WS_PYTHON" "$@"
+elif [ -n "${LAZYNEON_WS_LEGACY_PYTHON:-}" ]; then
+  exec "$LAZYNEON_WS_LEGACY_PYTHON" "$@"
+elif [ -x "$ROOT/.venv/bin/python" ]; then
+  exec "$ROOT/.venv/bin/python" "$@"
+elif [ -x "$HOME/.lazyneon-workspace/venv/bin/python" ]; then
+  exec "$HOME/.lazyneon-workspace/venv/bin/python" "$@"
+else
+  exec python3 "$@"
+fi

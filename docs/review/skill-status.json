@@ -1,0 +1,41 @@
+{
+  "KEEP": [
+    "court-evidence-stamper",
+    "court-pdf-binder",
+    "evidence-integrity-audit",
+    "financial-flow-tracer",
+    "korean-pii-masker"
+  ],
+  "KEEP-AFTER-FIX": [
+    "case-mode",
+    "court-ruling-analyzer",
+    "deepfake-forensic-radar",
+    "forensic-audit",
+    "forensic-report",
+    "forensic-timeline",
+    "forensic-video",
+    "humanize-korean",
+    "kakao-chat-extractor",
+    "korean-doc-parser",
+    "lazyforensic",
+    "legal-draft-builder",
+    "media-analysis",
+    "report-guard",
+    "sqlite-evidence-query",
+    "telegram-chat-extractor"
+  ],
+  "DISABLED-EXPERIMENTAL": [
+    "video-editor",
+    "web-evidence-capture"
+  ],
+  "DROP": [
+    "ai-trace-detector",
+    "dfir-evtx-hunter",
+    "dlp-leakage-detector",
+    "forensic-mft-parser",
+    "infographic-creator",
+    "legal-case-search",
+    "legal-forensic-consult",
+    "memory-triage"
+  ]
+}

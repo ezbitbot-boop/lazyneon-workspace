@@ -1,0 +1,12 @@
+✔ domain relay registers exactly four domain guards and no generic hooks (0.35ms)
+✔ domain relay rejects generic guards without executing them (277.978708ms)
+✔ catalog is exactly owner approved; experiments are not discoverable (0.50875ms)
+✔ case hashes detect content changes with isolated policy state (167.664833ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 619.2025

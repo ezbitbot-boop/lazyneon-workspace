@@ -1,0 +1,78 @@
+---
+name: media-analysis
+description: "음성/이미지/영상 파일 분석 워크플로: ffprobe 메타데이터 → 영상 무결성·오디오 서베이 → 프레임 추출(네이티브 비전 분석) → 서버 STT 전사(유튜브 자동자막·Google STT 서버 병렬 전송, 로컬 Whisper는 --allow-local-whisper로 선택) → tesseract OCR. Triggers: media, stt, transcribe, ocr, video analysis, youtube, 음성, 전사, 영상 분석."
+metadata:
+  short-description: "Media analysis pipeline: probe, frames, OCR, server STT transcription, video/audio survey"
+---
+
+# media-analysis
+
+음성·이미지·영상 파일을 분석할 때 이 스킬을 사용한다. **STT(음성 전사)는 명시적 업로드 동의를 받은 경우 서버(유튜브 서버 자동자막 + Google STT 서버 병렬 전송)로 수행한다. 로컬 Whisper는 `local_stt.py --allow-local-whisper`를 명시할 때만 쓴다.**
+
+## Pipeline (이 순서를 지켜라)
+
+1. **메타데이터 및 무결성 진단 (Probe 먼저)**:
+   - 영상 스트림·코덱·손상 여부 진단:
+     ```bash
+     ./scripts/py scripts/video_integrity.py <영상파일_또는_폴더>
+     ffprobe -v quiet -print_format json -show_format -show_streams <미디어파일>
+     ```
+   - 오디오 무음/발화 구간 서베이:
+     ```bash
+     ./scripts/py scripts/audio_survey.py <오디오파일_또는_폴더>
+     ```
+2. **영상 내용 및 키프레임 분석**:
+   - `forensic-video`의 `watch.py`로 키프레임과 서버 STT/유튜브 자막을 추출한 뒤, 반환된 이미지 경로를 호스트 네이티브 비전(`Read`)으로 직접 판독한다 (기본 `--detail efficient`, 개괄 20프레임 — 부족할 때만 50):
+     ```bash
+     ./scripts/py skills/forensic-video/scripts/watch.py <영상파일_또는_URL> --detail efficient --max-frames 20
+     ```
+3. **서버 음성 전사 (STT — 로컬 우선, 서버는 업로드 동의 필요)**:
+   - **유튜브 영상/URL**: 유튜브 서버 자동자막을 선택한 경우 `local_stt.py`에 URL(또는 파일명에 `[11자리_유튜브ID]`가 포함된 파일)을 넘기면 `yt-dlp`로 유튜브 서버 자막(`.vtt`)을 최우선 추출한다.
+   - **로컬 오디오/영상 및 구간 검증**: `local_stt.py`의 업로드 동의 시 엔진(`google-server`)이 `ffmpeg` 16kHz PCM 청크(25초 단위)를 `ThreadPoolExecutor`로 Google Speech-to-Text 서버(`recognize_google`, `ko-KR`)에 병렬 전송해 전사한다 (속도·정확도는 음질과 네트워크에 따라 다르므로 결과는 원음과 대조해 검증한다):
+     ```bash
+     ./scripts/py scripts/local_stt.py <오디오파일_또는_폴더_또는_유튜브URL> --allow-local-whisper --out-dir <작업폴더>/transcripts --lang ko --keywords "주요키워드"
+     python scripts/crime_schedule_xlsx.py --from-json schedule_rows.json -o 범죄일람표_청취검토.xlsx
+     python scripts/crime_schedule_xlsx.py --recalc 범죄일람표_청취검토.xlsx
+     python scripts/crime_schedule_xlsx.py --audit 범죄일람표_청취검토.xlsx --rule "쟁점어=근거어1,근거어2"
+     ```
+4. **이미지 텍스트 추출 (OCR)**:
+   - 이미지 또는 추출 프레임 속 텍스트는 `tesseract` CLI(기본 `kor+eng`)로 직접 추출한다:
+     ```bash
+     tesseract <이미지파일> stdout -l kor+eng
+     ```
+
+## 도구별 전제 조건
+
+| 작업 | 스크립트 / 바이너리 | 비고 |
+| --- | --- | --- |
+| 영상 무결성·메타데이터 | `scripts/video_integrity.py`, `ffprobe`, `ffmpeg` | 코덱·컨테이너 손상 및 길이 확인 |
+| 영상 키프레임·자막 추출 | `skills/forensic-video/scripts/watch.py`, `ffmpeg`, `yt-dlp` | watch.py에 URL을 주면 YouTube에 접속해 자막 조회·다운로드한다. Google 서버 STT 오디오 업로드만 --upload-audio 동의가 필요하다 |
+| 오디오 구간 서베이 | `scripts/audio_survey.py`, `ffmpeg` | 발화 구간·무음 구간 탐지 |
+| 서버 음성 전사 (STT) | `scripts/local_stt.py` (`google-server` / `youtube-subs`) | 로컬 --allow-local-whisper, 서버 --upload-audio 선택 |
+| 이미지 OCR | `tesseract` (`kor+eng` traineddata) | 로컬 CLI 직접 실행 |
+
+환경 점검: `./bin/lazyforensic setup --check`
+설치 안내: `pip install SpeechRecognition yt-dlp` (및 `ffmpeg`, `tesseract`)
+
+## 규칙
+
+- **로컬 Whisper 명시 선택**: `faster-whisper`, `openai-whisper`, `whisper-cli` 등 로컬 Whisper는 `--allow-local-whisper`를 명시하지 않는 한 쓰지 않는다. 대용량 배치에서 시간이 오래 걸리고 한국어 구어체·고유명사 오인식이 있었다는 메모가 있으나 벤치마크로 확인된 수치는 아니다. 동의한 서버 경로는 유튜브 서버 자동자막(`yt-dlp`) 또는 Google STT 서버(`recognize_google` 병렬 청크 전송)다.
+호스트가 제공하는 도구와 모델을 사용한다. 모델 라우팅·위임 방식은 LazyNeon core가 관리한다.
+- **프레임은 한 번만 읽는다**: 각 프레임을 `Read`로 1회 판독하고 관찰을 `frames_notes.md`(프레임 경로·타임스탬프·관찰 1~2줄)에 즉시 적는다. 이후 판단은 노트로 하고, 같은 이미지를 "다시 확인"하려고 재열람하지 않는다.
+호스트가 제공하는 도구와 모델을 사용한다. 모델 라우팅·위임 방식은 LazyNeon core가 관리한다.
+- **오디오와 영상은 따로 분석한다**: 음성 내용은 `local_stt.py` 서버 전사본, 시각 내용은 추출 프레임으로 각각 다룬다. 영상 파일을 통째로 모델에 보여 주고 대사를 받아 적게 하지 않는다 — 음성·영상을 분리 입력했을 때 날조가 적었다는 보고가 있고, 모델 전사에서 오류 사례도 보고됐다 (출처 미검증).
+- **타임스탬프 표기 규격 (소수점 초 금지)**: STT 전사본 정리 및 보고서·녹취록 인용 시 `384.94s`, `12.0초` 같은 원시 소수점 초(float seconds) 표기를 금지하고, 반드시 `MM분 SS초`(예: `06분 24초`) 또는 `MM:SS`(예: `06:24`, 1시간 이상은 `HH:MM:SS`) 정수 단위로 변환해 표기한다.
+- **원문 그대로 기술 (교차검증 메모·임의 윤문 금지)**: 전사 텍스트 및 대화록 본문에 `에이닷 N번 발언 교차확인`, `[전수 검증 완료]` 같은 에이전트 내부 교차검증 메모나 임의 윤문·의역을 섞지 말고 발화 원문 그대로 기술한다.
+- **대형 오디오 및 저음량/잡음 통화 녹음 파이프라인 (VAD 발화 분할 및 정규화)**: 고정 시간(20초/25초) 청크 분할은 문장 중간을 잘라 구글 서버 STT의 단어 유실을 초래하므로, 장시간 통화나 수십~수백 건의 대량 배치에서는 `audio_survey.py` 또는 `ffmpeg silencedetect`(무음 감지 VAD)로 발화 구간을 식별해 발화 단위 세그먼트로 분할하여 전송한다. 저음량·소음 구간은 대역 필터(`highpass=f=120, lowpass=f=3800`) 및 다이나믹 오디오 정규화(`dynaudnorm` 또는 `speechnorm`, `volume=6dB` 증폭)를 거쳐 정밀 전사를 수행한다.
+- **녹취록 요약표 레이아웃 및 안티-슬롭**: 녹취록·일람표 요약표는 4열 와이드 레이아웃(`핵심 확인 사실` 열 폭 확보, 길이·구간 고정)을 적용해 글자 겹침을 방지하고, 요약문 작성 시 AI 상투어(명사형 종결 `~논의하는 통화.`, 불필요한 수식어, 연결어미 뒤 쉼표)를 배제하고 서버 STT 원문 발화와 정수 타임스탬프(`MM:SS`)만 인용한다.
+- 전사·OCR 결과 파일(`.txt`/`.json`)은 증거 매니페스트(`evidence_manifest.py`) 체크포인트에 첨부할 수 있다.
+
+서버 STT 전체 흐름의 실제 전송·품질은 미검증이다. 네트워크 검증 없이는 성공을 주장하지 않는다. 로컬 파일의 `local_stt.py` 서버 전송에도 `--upload-audio` 동의가 필수다.
+
+비전 텍스트 판독은 `모델 판독(미검증)`으로 표시하고 OCR 출력과 대조한다.
+
+사용자가 이번 파일의 외부 업로드에 명시적으로 동의한 경우에만 다음 서버 경로를 사용한다:
+```sh
+./scripts/py scripts/local_stt.py <오디오> --upload-audio --lang ko
+```
+로컬 모델이 없으면 자동 다운로드하지 않는다. 모델 다운로드에 별도로 동의한 경우만 `--allow-model-download`를 사용하며 offline 설정이 우선한다.

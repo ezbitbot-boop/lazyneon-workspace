@@ -1,0 +1,288 @@
+import copy
+import hashlib
+import hmac
+import importlib.util
+import io
+import json
+import os
+import random
+import subprocess
+import sys
+import tempfile
+import pytest
+import unittest
+import wave
+import zipfile
+from contextlib import redirect_stdout
+from itertools import combinations
+from pathlib import Path
+from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+
+def load(relative):
+    spec = importlib.util.spec_from_file_location(Path(relative).stem, ROOT / relative)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+receipt = load("scripts/processing_receipt.py")
+export = load("scripts/evidence_export.py")
+frames = load("skills/forensic-video/scripts/frames.py")
+video = load("scripts/video_integrity.py")
+keyword = load("scripts/keyword_report.py")
+timeline = load("scripts/merge_timeline.py")
+images = load("scripts/image_similarity.py")
+audio = load("scripts/audio_survey.py")
+archive = load("scripts/archive_survey.py")
+hwpx = load("scripts/extract_hwpx.py")
+
+
+class RegressionTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(dir=ROOT)
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
+
+    def source(self, name="source.txt", content=b"synthetic source"):
+        path = self.root / name
+        path.write_bytes(content)
+        return path
+
+    def test_receipt_contract_and_artifact_hash(self):
+        source = self.source()
+        artifact = self.source("artifact.txt", b"derived")
+        result = receipt.build_receipt("E1", "test", receipt.TOOL_VERSION, source,
+            source_base=self.root, started_at=receipt.utc_now_iso(), artifacts=[artifact])
+        self.assertEqual(receipt.validate_receipt(result), [])
+        self.assertEqual(result["artifacts"][0]["sha256"], hashlib.sha256(b"derived").hexdigest())
+        self.assertEqual(result["review"], {"status": "pending", "reviewer": None, "reviewed_at": None})
+        self.assertIsNone(result["case_id"])
+        self.assertEqual(result["status"], "not_measured")
+
+    def test_receipt_validation_bad_types_never_crashes(self):
+        source = self.source()
+        base = receipt.build_receipt("E1", "test", "1", source,
+            source_base=self.root, started_at=receipt.utc_now_iso())
+        for key in base:
+            changed = copy.deepcopy(base)
+            del changed[key]
+            self.assertTrue(receipt.validate_receipt(changed), key)
+        for key, value in (("status", 5), ("source", "bad"), ("artifacts", "bad"),
+                           ("review", "bad"), ("tool", 3), ("started_at", 9)):
+            changed = copy.deepcopy(base)
+            changed[key] = value
+            self.assertTrue(receipt.validate_receipt(changed), key)
+
+    def test_receipt_complete_requires_measured_source_and_zero_exit(self):
+        source = self.source()
+        ok = receipt.build_receipt("E1", "test", "1", source, source_base=self.root,
+            started_at=receipt.utc_now_iso(), status="complete", exit_code=0)
+        self.assertEqual(receipt.validate_receipt(ok), [])
+        for mutate in (lambda r: r["source"].update(sha256=None),
+                       lambda r: r.update(exit_code=None),
+                       lambda r: r.update(exit_code=1)):
+            changed = copy.deepcopy(ok)
+            mutate(changed)
+            self.assertTrue(receipt.validate_receipt(changed))
+
+    def test_receipt_directory_source_cannot_be_complete(self):
+        result = receipt.build_receipt("E1", "test", "1", self.root,
+            source_base=self.root.parent, started_at=receipt.utc_now_iso(),
+            status="complete", exit_code=0)
+        self.assertEqual(result["status"], "partial")
+        self.assertIsNone(result["source"]["sha256"])
+        self.assertEqual(receipt.validate_receipt(result), [])
+
+    def test_receipt_null_timestamps_only_when_not_measured(self):
+        base = receipt.build_receipt("E1", "test", "1", self.source(),
+            source_base=self.root, started_at=receipt.utc_now_iso())
+        historical = copy.deepcopy(base)
+        historical.update(started_at=None, finished_at=None, status="not_measured")
+        self.assertEqual(receipt.validate_receipt(historical), [])
+        for status in ("complete", "partial", "failed"):
+            changed = copy.deepcopy(historical)
+            changed["status"] = status
+            self.assertTrue(receipt.validate_receipt(changed), status)
+
+    def test_receipt_build_always_pending_approval_needs_fields(self):
+        source = self.source()
+        result = receipt.build_receipt("E1", "test", "1", source,
+            source_base=self.root, started_at=receipt.utc_now_iso())
+        self.assertEqual(result["review"]["status"], "pending")
+        declared = copy.deepcopy(result)
+        declared["review"] = {"status": "approved", "reviewer": None, "reviewed_at": None}
+        self.assertTrue(receipt.validate_receipt(declared))
+        declared["review"] = {"status": "pending", "reviewer": "Caller", "reviewed_at": None}
+        self.assertTrue(receipt.validate_receipt(declared))
+        declared["review"] = {"status": "approved", "reviewer": "Reviewer",
+                              "reviewed_at": result["finished_at"]}
+        self.assertEqual(receipt.validate_receipt(declared), [])
+        earlier = copy.deepcopy(declared)
+        earlier["review"]["reviewed_at"] = "2000-01-01T00:00:00Z"
+        self.assertTrue(receipt.validate_receipt(earlier))
+
+    def test_receipt_unreadable_artifact_not_fabricated(self):
+        source = self.source()
+        with self.assertRaises(OSError):
+            receipt.build_receipt("E1", "test", "1", source, source_base=self.root,
+                started_at=receipt.utc_now_iso(), artifacts=[self.root / "absent.txt"])
+
+    def test_source_containment(self):
+        child = self.root / "child"
+        child.mkdir()
+        outside = self.source()
+        with self.assertRaises(ValueError):
+            receipt.resolve_source(outside, child)
+        link = child / "reference.txt"
+        try:
+            link.symlink_to(outside)
+        except OSError as exc:
+            self.skipTest(f"symlink creation unavailable: {exc}")
+        with self.assertRaises(ValueError):
+            receipt.resolve_source(link, child)
+
+
+
+    def test_export_resolution_provenance_and_no_self_hash(self):
+        evidence = self.root / "evidence"
+        evidence.mkdir()
+        source = evidence / "source.txt"
+        source.write_bytes(b"synthetic source")
+        manifest = self.source("manifest.json", json.dumps({"root": str(evidence), "files": [{
+            "path": source.name, "sha256": receipt.sha256_file(source), "mtime": "", "size": source.stat().st_size}]}).encode())
+        out = self.root / "out.json"
+        self.assertEqual(export.main([str(manifest), "-o", str(out)]), 0)
+        data = json.loads(out.read_text(encoding="utf-8"))
+        item = data["evidence_list"][0]
+        self.assertEqual(item["file_path"], str(source))
+        self.assertEqual(item["provenance"]["status"], "verified")
+        self.assertEqual(item["claimed_sha256"], item["verified_sha256"])
+        self.assertEqual(item["processing_receipt"]["status"], "complete")
+        self.assertEqual(item["processing_receipt"]["source"]["sha256"], item["sha256"])
+        self.assertEqual(receipt.validate_receipt(item["processing_receipt"]), [])
+        self.assertEqual(data["processing_receipt"]["artifacts"], [])
+        self.assertEqual(receipt.validate_payload(data), [])
+        source.write_bytes(b"updated synthetic source")
+        self.assertEqual(export.main([str(manifest), "-o", str(out)]), 1)
+        self.assertEqual(json.loads(out.read_text(encoding="utf-8"))["processing_receipt"]["status"], "partial")
+        self.assertEqual(export.main([str(manifest), "-o", str(source)]), 2)
+        self.assertEqual(source.read_bytes(), b"updated synthetic source")
+
+    def test_timeline_offsets_and_stable_unknown_order(self):
+        events = [{"timestamp": "2026-01-01T00:30:00+00:00", "id": 1},
+                  {"timestamp": "2026-01-01T09:00:00+09:00", "id": 2},
+                  {"timestamp": "unknown", "id": 3}, {"timestamp": "", "id": 4}]
+        with patch.object(timeline, "events_from_manifest", return_value=events):
+            result = timeline.merge(["synthetic"], [], [], [], {})["events"]
+        self.assertEqual([e["id"] for e in result], [2, 1, 3, 4])
+        self.assertEqual(result[0]["timestamp"], "2026-01-01T09:00:00+09:00")
+
+    def test_metadata_missing_and_failed_probe_unknown(self):
+        with patch.object(frames.shutil, "which", return_value=None):
+            metadata = frames.get_metadata("synthetic.mp4")
+        for field in ("duration", "width", "height", "fps"):
+            self.assertIsNone(metadata[field])
+        with patch.object(frames.shutil, "which", return_value="ffprobe"), patch.object(
+                frames.subprocess, "check_output", side_effect=OSError("unavailable")):
+            self.assertFalse(frames.get_metadata("synthetic.mp4")["available"])
+
+
+    def test_decode_timeout_is_structured(self):
+        source = self.source("synthetic.mp4")
+        with patch.object(video, "probe", return_value={"streams": [], "format": {}}), patch.object(
+                video, "moov_position", return_value="unknown"), patch.object(
+                video, "decode_errors", return_value={"decode_error": "timeout", "errors": [], "error_count": None}):
+            result = video.audit_video(source)
+        self.assertEqual(result["status"], "DECODE_FAILED")
+        self.assertIsNone(result["decode_error_count"])
+
+    def test_keyword_read_failure_reported(self):
+        source = self.source()
+        output = io.StringIO()
+        with patch.object(keyword, "search_file_result", return_value=([], "unreadable")), redirect_stdout(output):
+            keyword.main([str(source), "word", "--json"])
+        result = json.loads(output.getvalue())
+        self.assertEqual(result["files_searched"], 0)
+        self.assertEqual(result["files_read_failed"], 1)
+        self.assertIn(str(source), result["skipped"])
+
+    def test_audio_three_channel_mean_and_partial_second(self):
+        source = self.root / "three.wav"
+        import struct
+        with wave.open(str(source), "wb") as stream:
+            stream.setnchannels(3)
+            stream.setsampwidth(2)
+            stream.setframerate(8001)
+            stream.writeframes(struct.pack("<hhh", 9000, -3000, 6000) * 12002)
+        result = audio.survey(source, 0.01)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(len(result["rms_per_second"]), 2)
+        for value in result["rms_per_second"]:
+            self.assertAlmostEqual(value, 4000 / 32768, places=4)
+
+    def test_zip_aggregate_limit_benign_members(self):
+        source = self.root / "members.zip"
+        with zipfile.ZipFile(source, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            for n in range(3):
+                z.writestr(f"{n}.txt", b"a" * 200)
+        with patch.object(archive, "READ_TOTAL_CAP", 500):
+            result = archive.audit_zip(source, None)
+        self.assertEqual(result["status"], "partial")
+        self.assertLessEqual(result["read_budget_charged"], 500)
+        self.assertEqual(sum("sha256" in m for m in result["members"]), 2)
+
+    def test_hwpx_small_configured_limit(self):
+        source = self.root / "document.hwpx"
+        with zipfile.ZipFile(source, "w") as z:
+            z.writestr("Contents/section0.xml", "<root>ordinary text</root>")
+        with patch.object(hwpx, "SECTION_CAP", 8):
+            with self.assertRaises(RuntimeError):
+                hwpx.extract_text(source)
+
+    def test_exact_image_candidates_all_thresholds(self):
+        rng = random.Random(18)
+        hashes = [rng.getrandbits(64) for _ in range(50)]
+        hashes += [hashes[0], hashes[0] ^ 7, hashes[1] ^ 255]
+        records = [{"phash": h, "ahash": h, "dhash": h, "file": str(i), "colorhist": [1.0]} for i, h in enumerate(hashes)]
+        for threshold in (0, 1, 3, 10, 15, 16, 32, 64):
+            expected = {(str(i), str(j)) for i, j in combinations(range(len(records)), 2)
+                        if (hashes[i] ^ hashes[j]).bit_count() <= threshold}
+            actual = {(p["a"], p["b"]) for p in images.find_pairs(records, threshold)}
+            self.assertEqual(actual, expected, threshold)
+
+    @unittest.skipIf(sys.platform == "win32",
+                     "bin/lazyforensic is a POSIX shell script; symlink + exec requires POSIX")
+    def test_symlink_launcher(self):
+        link = self.root / "launcher"
+        link.symlink_to(ROOT / "bin/lazyforensic")
+        second = self.root / "second"
+        second.symlink_to("launcher")
+        result = subprocess.run([str(second), "manifest", "--help"], capture_output=True,
+                                env={**os.environ, "LAZYNEON_WS_PYTHON": sys.executable}, cwd=self.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    @unittest.skipIf(sys.platform == "win32",
+                     "bin/lazyforensic and bin/lazyothers are POSIX shell scripts")
+    def test_cli_subcommands_help(self):
+        env = {**os.environ, "LAZYNEON_WS_PYTHON": sys.executable}
+        lf = str(ROOT / "bin/lazyforensic")
+        lo = str(ROOT / "bin/lazyothers")
+        for sub in ("triage", "audit", "timeline", "telegram", "dlp", "evtx", "mft", "memory", "video", "verify"):
+            res = subprocess.run([lf, sub, "--help"], capture_output=True, env=env, cwd=self.root)
+            self.assertEqual(res.returncode, 0, f"lazyforensic {sub} --help failed: {res.stderr}")
+        for sub in ("doc", "sheet", "stamp", "bind", "draft", "pii", "ruling", "flow", "db", "integrity", "certify", "morph"):
+            res = subprocess.run([lo, sub, "--help"], capture_output=True, env=env, cwd=self.root)
+            self.assertEqual(res.returncode, 0, f"lazyothers {sub} --help failed: {res.stderr}")
+
+
+    @pytest.mark.kakao
+    @unittest.skipIf(sys.platform == "win32", "POSIX CLI wrapper")
+    def test_cli_parser_help(self):
+        res = subprocess.run([str(ROOT / "bin/lazyforensic"), "kakao", "--help"],
+                             capture_output=True, cwd=self.root,
+                             env={**os.environ, "LAZYNEON_WS_PYTHON": sys.executable})
+        self.assertEqual(res.returncode, 0, res.stderr)

@@ -1,13 +1,13 @@
 # LazyNeon Workspace
 
-Version **0.1.0** · Plugin `lazyneon-workspace` · MIT
+Version **0.2.0** · Plugin `lazyneon-workspace` · MIT
 
 Antigravity / Gemini 4 Neon용 독립 포렌식·한국어 문서·법률 초안 companion 플러그인.
 모델 라우팅과 일반 가드는 LazyNeon core 소유다. 도메인 규칙은 [rules/GEMINI.md](rules/GEMINI.md)를 따른다.
 
 ## 설치와 실행
 
-이 디렉터리를 호스트의 플러그인 등록 기능으로 등록한다. 다른 플러그인의 설치·탐지·업데이트는 수행하지 않는다.
+이 디렉터리를 호스트의 플러그인 등록 기능으로 등록한다. 형제 폴더에서 core 이름·버전을 읽기 전용 확인하며 자동 설치·업데이트하지 않는다.
 Python 3.12+, Node 20+가 필요하다. `python3 scripts/setup_forensic_env.py`로 공통 venv에 requirements.txt와 선택 의존성을 설치한다.
 CLI와 가드는 `LAZYNEON_WS_PYTHON` → 저장소 `.venv` → `~/.lazyneon-workspace/venv` → 시스템 Python 순으로 사용한다.
 `LAZYNEON_WS_LEGACY_PYTHON`은 기존 설정 호환용 별칭이며 새 설정에는 `LAZYNEON_WS_PYTHON`을 사용한다.
@@ -95,3 +95,6 @@ PreInvocation이 아직 전달하지 않은 실패·경고를 JSON으로 인용�
 미검증 대상은 `[미확인]` 실패로 기록한다. 법률 검증의 개별 timeout은 최대 25초이며
 `LAZYNEON_WS_VERIFY_TIMEOUT_MS`로 줄일 수 있다. stdout/stderr 원문 대신
 가드 이름, 대상 경로, PASS/FAIL/WARN/미확인 판정만 보존한다.
+
+설치 조합·한국어 규칙 적용 범위·Windows Python 선택 정책은 [README](../README.md),
+훅 결합 계약은 [hook-coexistence](hook-coexistence.md)를 따른다.

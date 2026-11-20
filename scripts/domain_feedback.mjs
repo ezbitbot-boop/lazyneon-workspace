@@ -39,9 +39,6 @@ function record(guard,target,kind,message) {
 const configured=Number(process.env.LAZYNEON_WS_FEEDBACK_BUDGET_MS);
 const deadline=started+(configured>0?Math.min(configured,115000):115000);
 const targets=contentTargets([{parsed:payload}]).filter(t=>!isCoreOwned(t));
-const name=payload.toolCall?.name || payload.tool_name || '';
-const input=payload.toolCall?.args || payload.tool_input || {};
-const command=input.CommandLine || input.command || input.cmd || '';
 if(targets.length || !isReadOnlyTool(payload)) {
   if(!targets.length && !hookTargets([{parsed:payload}]).length && isWriteCapable(payload)) record('domain guards',null,'unchecked','[미확인] 쓰기 대상을 명시해야 합니다.');
   for(const script of scripts) for(const target of targets) {

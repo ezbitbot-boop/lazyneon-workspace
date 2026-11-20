@@ -1,6 +1,6 @@
 {
   "name": "lazyneon-workspace",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "LazyNeon Workspace: independent forensic and Korean legal-document companion for Antigravity with Gemini 4 Neon.",
   "author": "daeryundf2-prog",
   "engines": {
@@ -22,5 +22,8 @@
   ],
   "type": "module",
   "license": "MIT",
-  "scripts": {}
+  "scripts": {},
+  "requires": {
+    "lazyneon": ">=0.3.0"
+  }
 }

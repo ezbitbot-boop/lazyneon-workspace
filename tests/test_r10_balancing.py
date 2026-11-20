@@ -286,13 +286,15 @@ def test_r10_windows_wrapper_contract():
     # and their destructive mutations are checked on every platform.
     import os
     cmd=(ROOT/'scripts/py.cmd').read_text();ps=(ROOT/'scripts/py.ps1').read_text()
+    selector=(ROOT/'scripts/select_python.ps1').read_text()
     def check(c,p):
         assert 'powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0py.ps1" %*' in c
         assert 'exit /b %ERRORLEVEL%' in c
-        assert '& $Py @args' in p and 'exit $LASTEXITCODE' in p
-        assert '$env:LAZYNEON_WS_PYTHON' in p
+        assert '& $Py @PyArgs @args' in p and 'exit $LASTEXITCODE' in p
+        assert 'select_python.ps1' in p and 'Select-WorkspacePython $Root' in p
+        assert '$env:LAZYNEON_WS_PYTHON' in selector
     check(cmd,ps)
-    for c,p in [(cmd.replace('%*',''),ps),(cmd,ps.replace('& $Py @args','')),(cmd.replace('exit /b %ERRORLEVEL%','exit /b 0'),ps)]:
+    for c,p in [(cmd.replace('%*',''),ps),(cmd,ps.replace('& $Py @PyArgs @args','')),(cmd.replace('exit /b %ERRORLEVEL%','exit /b 0'),ps)]:
         with pytest.raises(AssertionError):check(c,p)
     if os.name=='nt':
         result=subprocess.run([str(ROOT/'scripts/py.cmd'),'-c','import sys;sys.exit(7)'],env={**os.environ,'LAZYNEON_WS_PYTHON':sys.executable})

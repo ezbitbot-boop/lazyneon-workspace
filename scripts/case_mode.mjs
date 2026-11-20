@@ -112,12 +112,17 @@ function collectE01Segments(firstSegment) {
 async function hashEvidence(files) {
 	const results = [];
 	for (const f of files) {
-		const stat = fs.lstatSync(f);
+		const stat = fs.lstatSync(f, {bigint:true});
         if (stat.isSymbolicLink()) {
             throw new Error(`Symlink evidence entry unsupported: ${f}`);
         } else if (stat.isFile()) {
             if(stat.nlink>1) throw new Error(`Hard-linked evidence unsupported: ${f}`);
-            results.push({path: f, type: 'file', sha256: await sha256File(f), sizeBytes: stat.size});
+            const sha256 = await sha256File(f);
+            const after = fs.lstatSync(f, {bigint:true});
+            if (['dev','ino','size','mtimeNs','ctimeNs','nlink','mode'].some(k => stat[k] !== after[k])) {
+                throw new Error(`Evidence changed during hashing: ${f}`);
+            }
+            results.push({path: f, type: 'file', sha256, sizeBytes: Number(stat.size)});
         } else throw new Error(`Unsupported evidence entry: ${f}`);
 	}
 	return results;
@@ -370,11 +375,14 @@ async function cmdClose(argv) {
 	const baselineMap = new Map(baseline.files.map((f) => [f.path, f]));
     const currentFiles = fs.lstatSync(baseline.evidencePath, {throwIfNoEntry: false}) ? collectEvidenceFiles(baseline.evidencePath, true) : [];
     const currentSet = new Set(currentFiles);
+    const currentMap = new Map();
     let rootHash = null;
     let rootError = null;
     try {
         const stat = fs.lstatSync(baseline.evidencePath);
-        rootHash = evidenceRootHash(await hashEvidence(currentFiles), baseline.evidencePath, stat.isDirectory());
+        const measured = await hashEvidence(currentFiles);
+        for (const row of measured) currentMap.set(row.path, row);
+        rootHash = evidenceRootHash(measured, baseline.evidencePath, stat.isDirectory());
     } catch (error) {rootError = error.message;}
     if (rootHash) console.log(`ROOT HASH: ${rootHash}`);
     else console.error(`ROOT HASH unavailable: ${rootError}`);
@@ -387,9 +395,8 @@ async function cmdClose(argv) {
 			missing.push(orig.path);
 			continue;
 		}
-		const st=fs.lstatSync(orig.path);
-        if(!st.isFile()) {changed.push({path:orig.path,type:st.isSymbolicLink()?'symlink':'unsupported',originalSha256:orig.sha256,currentSha256:null});continue;}
-        const current = (await hashEvidence([orig.path]))[0];
+        const current = currentMap.get(orig.path);
+        if (!current) {changed.push({path:orig.path,type:'unverified',originalSha256:orig.sha256,currentSha256:null});continue;}
         const currentHash = current.sha256;
 		if (currentHash !== orig.sha256 || current.type !== (orig.type || 'file')) {
 			changed.push({

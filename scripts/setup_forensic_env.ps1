@@ -10,19 +10,12 @@ param(
     [string[]]$With = @()
 )
 $ErrorActionPreference = "Stop"
-$python = $env:LAZYNEON_WS_PYTHON
-if (-not $python) { $python = $env:LAZYNEON_WS_LEGACY_PYTHON }
-if (-not $python) {
-    $command = Get-Command python -ErrorAction SilentlyContinue
-    if (-not $command) { $command = Get-Command py -ErrorAction SilentlyContinue }
-    if ($command) { $python = $command.Source }
-}
-if (-not $python) {
-    Write-Error "python을 찾을 수 없습니다. python.org에서 3.12+ 설치 후 재시도하세요."
-    exit 2
-}
+. (Join-Path $PSScriptRoot "select_python.ps1")
+$selection = Select-WorkspacePython (Split-Path -Parent $PSScriptRoot)
+$python = $selection.Executable
+$PyArgs = @($selection.Arguments)
 $forward = @("--dir", $Dir)
 if ($Check) { $forward += "--check" }
 if ($With.Count -gt 0) { $forward += "--with"; $forward += $With }
-& $python (Join-Path $PSScriptRoot "setup_forensic_env.py") @forward
+& $python @PyArgs (Join-Path $PSScriptRoot "setup_forensic_env.py") @forward
 exit $LASTEXITCODE

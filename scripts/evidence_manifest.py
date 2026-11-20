@@ -56,7 +56,7 @@ def sha256_file(path: Path) -> str:
 def build_manifest(root: Path) -> dict:
     files = []
     for f in sorted(root.rglob("*")):
-        if not f.is_file() or "__pycache__" in f.parts:
+        if not f.is_file():
             continue
         st = f.stat()
         files.append({
@@ -87,7 +87,7 @@ def verify_manifest(root: Path, manifest: dict) -> list[str]:
               file=sys.stderr)
     recorded = {e["path"]: e for e in manifest.get("files", [])}
     current = {str(f.relative_to(root)): f for f in root.rglob("*")
-               if f.is_file() and "__pycache__" not in f.parts}
+               if f.is_file()}
 
     for path in sorted(set(recorded) - set(current)):
         problems.append(f"MISSING: {path}")

@@ -1,18 +1,65 @@
 # LazyNeon Workspace
 
-Version **0.1.0** · Plugin `lazyneon-workspace` · MIT
+Version **0.2.0** · Plugin `lazyneon-workspace` · MIT
 
 Antigravity / Gemini 4 Neon용 독립 포렌식·한국어 문서·법률 초안 companion 플러그인.
 모델 라우팅과 일반 가드는 LazyNeon core 소유다. 도메인 규칙은 [rules/GEMINI.md](rules/GEMINI.md)를 따른다.
 
 ## 설치와 실행
 
-이 디렉터리를 호스트의 플러그인 등록 기능으로 등록한다. 다른 플러그인의 설치·탐지·업데이트는 수행하지 않는다.
+이 디렉터리를 호스트의 플러그인 등록 기능으로 등록한다. 형제 폴더의 plugin.json에서 LazyNeon core 이름·버전을 읽기 전용 확인하며 설치·업데이트하지 않는다.
 Python 3.12+, Node 20+가 필요하다. `python3 scripts/setup_forensic_env.py`로 공통 venv에 requirements.txt와 선택 의존성을 설치한다.
 CLI와 가드는 `LAZYNEON_WS_PYTHON` → 저장소 `.venv` → `~/.lazyneon-workspace/venv` → 시스템 Python 순으로 사용한다.
 `LAZYNEON_WS_LEGACY_PYTHON`은 기존 설정 호환용 별칭이며 새 설정에는 `LAZYNEON_WS_PYTHON`을 사용한다.
 `bin/lazyforensic`는 유지 스킬이 사용하는 CLI이다. `bin/lazyothers`는 문서 처리 CLI이다.
 외부 서비스 실연동과 Gemini 4 Neon의 윤문 품질은 아직 검증되지 않았다.
+
+## Install both (recommended)
+
+Core remains usable alone. Node 20+, Git, and Python 3.12+ are required for both.
+For hosts that forbid plugin-driven Git writes, install the companion manually
+with the following steps. Automatic cloning is not provided in this release.
+The clone/bootstrap and host registration flow still require installation testing.
+
+macOS (Terminal):
+
+```sh
+mkdir -p "$HOME/Plugins"
+cd "$HOME/Plugins"
+git clone https://github.com/ezbitbot-boop/lazyneon.git lazyneon
+git clone https://github.com/ezbitbot-boop/lazyneon-workspace.git lazyneon-workspace
+cd lazyneon-workspace
+python3.12 scripts/setup_forensic_env.py
+cd ../lazyneon
+LAZYNEON_OFFLINE=1 node bin/lazyneon doctor
+```
+
+Windows (PowerShell):
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE/Plugins"
+Set-Location "$env:USERPROFILE/Plugins"
+git clone https://github.com/ezbitbot-boop/lazyneon.git lazyneon
+git clone https://github.com/ezbitbot-boop/lazyneon-workspace.git lazyneon-workspace
+Set-Location lazyneon-workspace
+py -3.12 scripts/setup_forensic_env.py
+Set-Location ../lazyneon
+$env:LAZYNEON_OFFLINE = '1'
+node bin/lazyneon doctor
+```
+
+Register **both roots separately** in Antigravity's local plugin installation
+function: select Plugins/lazyneon, enable it; select Plugins/lazyneon-workspace,
+enable it; start a new session and check both runtime notices. Host-version-specific
+UI labels/registration CLI remain [미확인]; no undocumented registration command is
+assumed. Keep both folders under the same parent (folder names may differ: lookup
+uses plugin.json name). Core declares optional companion >=0.1.0; the supported pairing requires
+core >=0.3.0. Their version numbers need not match. Neither check installs or blocks.
+See [hook order](docs/hook-coexistence.md).
+
+Workspace 진단: `LAZYNEON_OFFLINE=1 node scripts/doctor.mjs --json` (PowerShell은 먼저 `$env:LAZYNEON_OFFLINE = "1"`).
+같은 이름의 형제 설치가 여러 개면 가장 높은 안정 버전을 진단한다.
+core 미설치는 doctor WARN 및 매 SessionStart 한 줄 경고다. 비호환 버전도 경고하며 세션을 차단하지 않는다.
 
 ## Windows (PowerShell)
 
@@ -134,3 +181,19 @@ p='<plugin>'; s=$(git -C "$p" status --porcelain --untracked-files=normal) && { 
 ```
 
 `python scripts/workspace_provenance.py`는 설치된 Workspace의 버전·Git 커밋·dirty 여부를 반환합니다. 보고서 작성 시 출력값을 기록하고, 검증 시점의 출처와 구분하여 보존합니다. Git 없는 배포본의 커밋/dirty 값은 `unknown`입니다.
+
+## 한국어 규칙 적용 범위
+
+Workspace는 `rules/GEMINI.md`의 도메인 규칙과 각 스킬의 지침을 적용한다.
+`humanize-korean`은 자체 references의 문체 규칙을 사용한다. Core의 `rules/korean/`
+세 문서를 직접 읽도록 연결된 경로는 core의 `ulw`, `programming`, `remove-ai-slops`다.
+Workspace 전체 스킬에 이 세 문서가 자동 주입되거나 core의 Stop reply guard가
+Workspace 단독 설치에서 실행된다고 주장하지 않는다. 법률·증거·PII 작업과 원문 인용은 한국어를 유지한다.
+
+Windows 래퍼는 공통 `scripts/select_python.ps1`에서 후보마다 3초 제한으로 실행 가능성과
+Python 3.12 이상을 검사한다. 실행 불가한 WindowsApps 별칭은 다음 후보로 넘어가며,
+`py`는 `-3.12`로 실행한다. 명시한 인터프리터가 잘못되면 오류를 반환한다.
+
+업데이트 잠금은 PID·생성 시각을 기록하며 60초 이상 지났고 소유 프로세스가 없는 경우만 회수한다.
+소유 정보가 없는 구형/손상 잠금은 자동 삭제하지 않는다. 관련 프로세스가 없음을 확인한 뒤 관리자가 복구한다.
+업데이트 조회의 전체 Git 시간 예산은 4.5초다. 실제 호스트/Windows 실기 검증은 별도 필요하다.

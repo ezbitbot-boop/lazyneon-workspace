@@ -1,7 +1,7 @@
 {
   "name": "lazyneon-workspace",
   "displayName": "LazyNeon Workspace",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "LazyNeon Workspace: independent forensic and Korean legal-document companion for Antigravity with Gemini 4 Neon. Not a forensic acquisition or court-admissibility suite.",
   "author": {
     "name": "daeryundf2-prog",
@@ -33,5 +33,8 @@
       "Korean PII Masking & Humanize KR Deslop"
     ],
     "brandColor": "#1E3A8A"
+  },
+  "requires": {
+    "lazyneon": ">=0.3.0"
   }
 }

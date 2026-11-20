@@ -5,23 +5,10 @@
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 
-# 우선순위: $LAZYNEON_WS_PYTHON > $LAZYNEON_WS_LEGACY_PYTHON > $Root\.venv > %USERPROFILE%\.lazyneon-workspace/venv > python > py
-if ($env:LAZYNEON_WS_PYTHON) {
-    $Py = $env:LAZYNEON_WS_PYTHON
-} elseif ($env:LAZYNEON_WS_LEGACY_PYTHON) {
-    $Py = $env:LAZYNEON_WS_LEGACY_PYTHON
-} elseif (Test-Path "$Root\.venv\Scripts\python.exe") {
-    $Py = "$Root\.venv\Scripts\python.exe"
-} elseif (Test-Path "$env:USERPROFILE\.lazyneon-workspace/venv\Scripts\python.exe") {
-    $Py = "$env:USERPROFILE\.lazyneon-workspace/venv\Scripts\python.exe"
-} elseif (Get-Command python -ErrorAction SilentlyContinue) {
-    $Py = "python"
-} elseif (Get-Command py -ErrorAction SilentlyContinue) {
-    $Py = "py"
-} else {
-    Write-Error "python을 찾을 수 없습니다. python.org에서 3.12+ 설치 후 재시도하세요."
-    exit 2
-}
+. (Join-Path $Root "scripts/select_python.ps1")
+$selection = Select-WorkspacePython $Root
+$Py = $selection.Executable
+$PyArgs = @($selection.Arguments)
 
 function Usage {
     Write-Host @"
@@ -57,16 +44,16 @@ $cmd = $args[0]
 $rest = @($args | Select-Object -Skip 1)
 
 switch ($cmd) {
-    "triage" { & $Py (Join-Path $Root "scripts/case_survey.py") @rest; exit $LASTEXITCODE }
-    "kakao" { & $Py (Join-Path $Root "skills/kakao-chat-extractor/scripts/parse_kakao.py") @rest; exit $LASTEXITCODE }
-    "telegram" { & $Py (Join-Path $Root "skills/telegram-chat-extractor/scripts/parse_telegram.py") @rest; exit $LASTEXITCODE }
-    "mft" { & $Py (Join-Path $Root "scripts/parse_ntfs_artifacts.py") @rest; exit $LASTEXITCODE }
-    "video" { & $Py (Join-Path $Root "skills/forensic-video/scripts/forensic_video_audit.py") @rest; exit $LASTEXITCODE }
-    "deepfake" { & $Py (Join-Path $Root "scripts/analyze_deepfake_evidence.py") @rest; exit $LASTEXITCODE }
-    "timestamps" { & $Py (Join-Path $Root "skills/forensic-audit/scripts/audit_timestamps.py") @rest; exit $LASTEXITCODE }
-    "verify" { & $Py (Join-Path $Root "scripts/verify_report.py") @rest; exit $LASTEXITCODE }
-    "evtx" { if ($rest.Count -eq 0) { $rest = @("hayabusa.exe", "chainsaw.exe") }; & $Py (Join-Path $Root "scripts/check_tool.py") @rest; exit $LASTEXITCODE }
-    "memory" { if ($rest.Count -eq 0) { $rest = @("MemProcFS.exe", "vol.py") }; & $Py (Join-Path $Root "scripts/check_tool.py") @rest; exit $LASTEXITCODE }
+    "triage" { & $Py @PyArgs (Join-Path $Root "scripts/case_survey.py") @rest; exit $LASTEXITCODE }
+    "kakao" { & $Py @PyArgs (Join-Path $Root "skills/kakao-chat-extractor/scripts/parse_kakao.py") @rest; exit $LASTEXITCODE }
+    "telegram" { & $Py @PyArgs (Join-Path $Root "skills/telegram-chat-extractor/scripts/parse_telegram.py") @rest; exit $LASTEXITCODE }
+    "mft" { & $Py @PyArgs (Join-Path $Root "scripts/parse_ntfs_artifacts.py") @rest; exit $LASTEXITCODE }
+    "video" { & $Py @PyArgs (Join-Path $Root "skills/forensic-video/scripts/forensic_video_audit.py") @rest; exit $LASTEXITCODE }
+    "deepfake" { & $Py @PyArgs (Join-Path $Root "scripts/analyze_deepfake_evidence.py") @rest; exit $LASTEXITCODE }
+    "timestamps" { & $Py @PyArgs (Join-Path $Root "skills/forensic-audit/scripts/audit_timestamps.py") @rest; exit $LASTEXITCODE }
+    "verify" { & $Py @PyArgs (Join-Path $Root "scripts/verify_report.py") @rest; exit $LASTEXITCODE }
+    "evtx" { if ($rest.Count -eq 0) { $rest = @("hayabusa.exe", "chainsaw.exe") }; & $Py @PyArgs (Join-Path $Root "scripts/check_tool.py") @rest; exit $LASTEXITCODE }
+    "memory" { if ($rest.Count -eq 0) { $rest = @("MemProcFS.exe", "vol.py") }; & $Py @PyArgs (Join-Path $Root "scripts/check_tool.py") @rest; exit $LASTEXITCODE }
 
     "scan"     { $script = "case_survey.py" }
     "stt"      { $script = "local_stt.py" }
@@ -98,5 +85,5 @@ switch ($cmd) {
     default { Write-Error "알 수 없는 명령: $cmd"; Usage; exit 2 }
 }
 
-& $Py (Join-Path $Root "scripts\$script") @rest
+& $Py @PyArgs (Join-Path $Root "scripts\$script") @rest
 exit $LASTEXITCODE

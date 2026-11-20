@@ -1,11 +1,20 @@
 """Shared output boundary: declared evidence roots are never output directories."""
 import json
+import ntpath
+import os
 from pathlib import Path
 import unicodedata
 
 
 def identity(p):
-    return unicodedata.normalize('NFC', str(Path(p).resolve())).casefold()
+    # Normalize foreign Windows paths for portable boundary checks as well.
+    raw = str(p)
+    if ntpath.isabs(raw) and (ntpath.splitdrive(raw)[0] or '\\' in raw):
+        resolved = str(Path(p).resolve()) if os.name == 'nt' else ntpath.normpath(raw)
+        raw = resolved.replace('\\', '/')
+    else:
+        raw = str(Path(p).resolve())
+    return unicodedata.normalize('NFC', raw.replace('\\', '/')).casefold()
 
 
 def within(p, root):

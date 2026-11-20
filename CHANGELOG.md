@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 — 2026-11-20
+
+- core 제외 경로를 실행 목록과 문서 대조로 단일화하고 README·GEMINI는 정본을 참조.
+- 연구 최종 보고서·SYNTHESIS 및 sources 파일의 core 상태 면제 제거; 작업 저널·예약 상태 면제 유지. SYNTHESIS 파일명도 환각 가드의 최종 보고서로 인식.
+- pins/scope 읽기·주입 주체가 core임을 명시.
+- 아티팩트 라우터·SQLite·패키지 문서 분석 스킬에 AI 미끼와 예산 소진 보고 체크리스트 추가.
+
 ## 0.2.0 — 2026-11-20
 
 - `requires: lazyneon >=0.3.0`: 형제 plugin.json을 읽는 SessionStart/doctor companion 진단. core 미설치 시 매 세션 경고, 미설치·비호환은 비차단 WARN.

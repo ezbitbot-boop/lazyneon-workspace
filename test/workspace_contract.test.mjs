@@ -13,7 +13,7 @@ function session(cwd, payload={}) {
 }
 function temporary(fn) {const p=fs.mkdtempSync(path.join(os.tmpdir(),'neon-contract-'));try {fn(p);}finally{fs.rmSync(p,{recursive:true,force:true});}}
 test('session without optional core files creates no state',()=>temporary(p=>{
- const msg=session(p);assert.match(msg,/LazyNeon Workspace 0.2.0/);assert.match(msg,/세션 모델: 미확인/);assert.deepEqual(fs.readdirSync(p),[]);
+ const msg=session(p);assert.match(msg,/LazyNeon Workspace 0.2.1/);assert.match(msg,/세션 모델: 미확인/);assert.deepEqual(fs.readdirSync(p),[]);
 }));
 test('core inputs are not reinjected or changed',()=>temporary(p=>{
  const core=path.join(p,'.lazyneon');fs.mkdirSync(core);

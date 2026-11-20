@@ -11,7 +11,7 @@ try { payload = JSON.parse(await readHookStdin() || '{}'); } catch {}
 const lines = [
   fs.readFileSync(path.join(root, 'rules/GEMINI.md'), 'utf8'),
   '\n## 런타임\n',
-  'LazyNeon Workspace 0.2.0 — Antigravity / Gemini 4 Neon',
+  'LazyNeon Workspace 0.2.1 — Antigravity / Gemini 4 Neon',
   `세션 모델: ${payload.modelName || '미확인 (호스트 보고값 없음)'}`,
   '모델 라우팅 및 일반 가드는 LazyNeon core가 관리한다.',
   '도메인 가드: evidence_guard, hallucination_guard, legal_factuality_guard, slop_guard.',

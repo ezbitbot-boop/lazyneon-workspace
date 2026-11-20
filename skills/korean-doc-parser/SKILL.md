@@ -51,6 +51,16 @@ ${PLUGIN_ROOT}/scripts/py scripts/bench_parser.py --docs 20 --pages 30 --json
 - 의뢰인 배포용 문서나 법원 제출용 서식 개편 시 기본적으로 구형 환경 호환성이 검증된 **순수 HWP 5.0 (`.hwp`)** OLE 바이너리 규격 생성을 우선 고려하거나, HWPX와 HWP 양쪽 포맷을 함께 확인하여 전달합니다.
 - **추출 표를 A4 HTML/PDF 보고서로 재조판할 때 (`print-paged-media.md` §8)**: `parse_korean_doc.py`로 추출한 공문서·감정서 표(`tables`)를 A4 HTML/PDF로 렌더링할 때는 `table { table-layout: fixed; width: 100%; }`와 `<colgroup>` 열 너비를 고정하고, 수치·바이트·금액 열은 `.num { text-align: right; font-variant-numeric: tabular-nums; }`, 긴 파일명·경로·해시는 `.file-cell { overflow-wrap: anywhere; word-break: break-all; }` 또는 2단 서브행(`tr.row-sub`)으로 배치하여 셀 수직 공백(`layout_cell_void_imbalance`)과 Chromium 인쇄 자동 축소(`layout_print_shrink_risk`)를 차단합니다.
 
+
+## AI decoy / anti-analysis trap
+
+앱·바이너리·번들·패키지 데이터 분석 시 적용한다. 이 체크리스트는 새 실행 권한을 부여하지 않는다.
+
+- [ ] AI가 만든 결론은 가설로 취급한다. 원본 SHA-256을 고정하고 각 결론을 결정적 도구로 대조한다: 구조는 포맷 파서, 실제 동작은 승인된 격리 환경의 실행 추적 또는 동적 관찰로 확인한다. 해시 일치만으로 동작을 입증하지 않는다.
+- [ ] 가짜·honey 소스맵, opaque predicate 뒤의 죽은 미끼 분기, shadow state machine, 미끼 문자열·가짜 API 키, 비활성 섹션을 확인한다. 문자열이나 정적 분기의 존재만으로 실행·비밀 유출을 단정하지 않는다.
+- [ ] 과대 압축파일·WASM·SQLite 테이블의 크기·항목 수를 먼저 확인하고 시간·메모리·해제 용량 한도를 정한다. 무제한 전개·실행 대신 제한된 파싱과 표본 범위를 기록한다.
+- [ ] 미끼 징후는 확인될 때까지 보고서에 [미확인]으로 표시하고 원본 위치·도구·명령·관찰 결과를 붙인다. 예산 소진 중단은 검사 범위·미검사 부분·중단 사유로 기록하며 “nothing found(발견 없음)”로 보고하지 않는다.
+
 ## 민감 자료 모델 제한
 
 PII·민감정보, 보안 감사, 포렌식 판정 및 증거 루트 아래 자료를 다루는 모든 작업은

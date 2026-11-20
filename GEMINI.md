@@ -1,4 +1,4 @@
-# LazyNeon Workspace 0.2.0
+# LazyNeon Workspace 0.2.1
 
 호스트: Antigravity, Gemini 4 Neon. 모델 라우팅은 LazyNeon core가 소유하며 이 플러그인은 정의하지 않는다.
 증거 분석·한국어 문서·법률 초안의 독립 도메인 플러그인이다. 포렌식 획득 또는 법원 제출 적격성을 보장하지 않는다.
@@ -6,7 +6,7 @@
 ## 코어 계약
 
 - `.lazyneon/` 및 write_chunk, markdown_structure, json_schema, stop_claim, lookup, selfcheck, post_tool_feedback 가드는 코어 소유다.
-- 고정 식별자 `.lazyneon/pins.md`, 범위 잠금 `.lazyneon/ulw-scope.md`는 있을 때만 읽는다. 이 플러그인은 두 파일을 생성·수정하지 않는다.
+- 고정 식별자 `.lazyneon/pins.md`, 범위 잠금 `.lazyneon/ulw-scope.md`: 두 파일의 읽기·주입은 core SessionStart가 담당한다. Workspace는 두 파일을 읽어 재주입하거나 생성·수정하지 않는다.
 - 자체 상태·고정 식별자·감사 로그는 `.lazyneon-workspace/`, 자체 환경변수는 `LAZYNEON_WS_*`를 쓴다.
 - 형제 폴더의 plugin.json 이름·버전으로 LazyNeon core >=0.3.0을 읽기 전용 확인한다. 미설치·비호환은 매 세션 경고하며 차단하거나 자동 설치하지 않는다.
 - evidence_guard, hallucination_guard, legal_factuality_guard, slop_guard만 도메인 가드로 등록한다.
@@ -28,7 +28,8 @@
 - **감사 수치**: "N개 중 M개 결함" 결론은 직접 연 `파일:라인`과 실행 출력에만 근거한다.
 - **SPA 채증**: 표준/ARIA 셀렉터를 쓰고 네비게이션 직후 `waitForLoadState`/`waitForSelector` 안정화 뒤 조작한다.
 - **커버리지 수신증**: "전수/100% 커버리지" 주장은 `node scripts/coverage_audit.mjs --source <원문파일> --target <산출물…> --json <수신증.json>` 출력으로만 뒷받침한다(`--source` 필수).
-- **부모 검증 & High-Fidelity**: `forensic-report` 초안은 분석 담당자가 `python scripts/verify_report.py <보고서> --evidence <audit.json> --morph-grounding --high-fidelity`로 재검증한다(`<evidence>` 누락·형태소 커버리지 70% 미달·`FAIL` 시 제출 금지). `.lazyneon-workspace/pins.md`·`.lazyneon-workspace/ulw-scope.md` 및 `.lazyneon/ulw-research/<session>/`의 명시된 세션 저널(`brief.md`, `claim-graph.md`, `intent-diff.md`, `observation-manifest.md`, `verification-economics.md`, `cause-disappearance.md`, `excursion-log.md`, `expansion-log.md`, `sources-ledger.md`, `debate-log.md`)은 `hallucination_guard.mjs`에서 제외한다.
+- **부모 검증 & High-Fidelity**: `forensic-report` 초안은 분석 담당자가 `python scripts/verify_report.py <보고서> --evidence <audit.json> --morph-grounding --high-fidelity`로 재검증한다(`<evidence>` 누락·형태소 커버리지 70% 미달·`FAIL` 시 제출 금지).
+  제외 경로의 정본은 [도메인 가드 대상](docs/domain-targets.md)이다.
 - **컴팩션 요약 불신 및 볼륨 시리얼 대조**: `<CONTEXT_SUMMARY>`는 인접 행 `hit_id`·`artifact_name`을 오염시키므로 인용 전 `query_evidence_db.py --verify-hits/--verify-report`(`verify_report.py --axiom-db`)와 `.lazyneon-workspace/pins.md`로 재검증한다. 다중 디스크 환경은 볼륨 시리얼과 구 드라이브 후속 입출력 대조 전까지 드라이브 문자 변경으로 단정하지 않는다.
 
 

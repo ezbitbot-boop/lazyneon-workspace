@@ -60,6 +60,16 @@ SQL로 번역**해 `--sql`로 넘긴다. 번역된 SQL과 결과 건수를 사�
 - **컴팩션(`<CONTEXT_SUMMARY>`) 오염 방어 및 AXIOM `Case.mfdb` 인용 검증**: 대형 DB(수백만 행) 다중 탐색 중 컨텍스트 컴팩션이 발동되면 요약기(`<CONTEXT_SUMMARY>`)가 인접 행의 `hit_id`와 `artifact_name`을 서로 뒤섞어 날조(`LNK Files` ↔ `Jump Lists`, 일반 `Windows Event Logs` ↔ `Storage Device Events`, `Pictures` ↔ `Text Documents` 등)한다. 탐색 즉시 확정된 `(hit_id, artifact_name, 핵심값)`을 `.lazyneon-workspace/pins.md`에 기록하고, `<CONTEXT_SUMMARY>` 내부의 ID·분류명은 절대 신뢰하지 말며, 최종 보고 직전 반드시 `--verify-hits` 또는 `--verify-report`(혹은 `verify_report.py --axiom-db Case.mfdb`)로 1:1 실측 대조한다.
 - **상용 도구(AXIOM) 미파싱 사각지대 및 원격 푸시↔로컬 커밋 분리**: AXIOM `Case.mfdb`는 `.git/config`, `.git/logs/refs/remotes/origin/*`(원격 푸시), `.git/logs/HEAD`(로컬 커밋) 및 PowerShell `>` 리다이렉션이 만든 `UTF-16` 텍스트(`file_list.txt` 등)를 파싱하지 못한다. 소스코드·설계도면 유출 사건은 반드시 원본 이미지(E01 마운트 또는 디렉터리)에 `--scan-git-dir`을 실행해 **원격 푸시(`logs/refs/remotes/**`)**와 미전송 **로컬 커밋(`logs/HEAD`, `commit_msg*.txt`)**을 엄격히 분리하고, AI 코딩 도구 이력(`Claude Command History`)에 `--scan-insider-prompts`를 실행해 코드 은폐·주석 제거(`내부발신`, `안나가게`) 및 메모리 삭제 지시(`메모리에 적지마`)를 전수 탐지한다.
 
+
+## AI decoy / anti-analysis trap
+
+앱·바이너리·번들·패키지 데이터 분석 시 적용한다. 이 체크리스트는 새 실행 권한을 부여하지 않는다.
+
+- [ ] AI가 만든 결론은 가설로 취급한다. 원본 SHA-256을 고정하고 각 결론을 결정적 도구로 대조한다: 구조는 포맷 파서, 실제 동작은 승인된 격리 환경의 실행 추적 또는 동적 관찰로 확인한다. 해시 일치만으로 동작을 입증하지 않는다.
+- [ ] 가짜·honey 소스맵, opaque predicate 뒤의 죽은 미끼 분기, shadow state machine, 미끼 문자열·가짜 API 키, 비활성 섹션을 확인한다. 문자열이나 정적 분기의 존재만으로 실행·비밀 유출을 단정하지 않는다.
+- [ ] 과대 압축파일·WASM·SQLite 테이블의 크기·항목 수를 먼저 확인하고 시간·메모리·해제 용량 한도를 정한다. 무제한 전개·실행 대신 제한된 파싱과 표본 범위를 기록한다.
+- [ ] 미끼 징후는 확인될 때까지 보고서에 [미확인]으로 표시하고 원본 위치·도구·명령·관찰 결과를 붙인다. 예산 소진 중단은 검사 범위·미검사 부분·중단 사유로 기록하며 “nothing found(발견 없음)”로 보고하지 않는다.
+
 ## 민감 자료 모델 제한
 
 PII·민감정보, 보안 감사, 포렌식 판정 및 증거 루트 아래 자료를 다루는 모든 작업은

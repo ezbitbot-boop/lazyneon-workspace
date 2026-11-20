@@ -21,10 +21,39 @@ export function isReadOnlyTool(p) {
   if (/write|edit|replace|patch|generate|fill|redact|seal|update|delete|move/i.test(name)) return false;
   return /^(?:read|get|list|search|inspect|parse)_[a-z_]+$/i.test(name) || /^(?:read|get|list|search|inspect|read_file|read_text_file|read_document|get_file|list_files|search_files|inspect_file)$/i.test(name) || /^(ReadFile|Read|view_file|view_file_outline|view_code_item|list_dir|grep_search|find_by_name|codebase_search|parse_document|detect_format|parse_metadata|parse_pages|parse_table|compare_documents|parse_chunks|parse_form|list_resources|read_resource|query-docs|resolve-library-id)$/.test(name);
 }
-// Reserved core state only; reports under .lazyneon are ordinary outputs.
-// See docs/domain-targets.md for the exact formats and ownership rationale.
+// Reserved core state and working journals; final deliverables are ordinary outputs.
+// docs/domain-targets.md lists these formats; the regression test checks equality.
+export const CORE_OWNED_PATHS = Object.freeze([
+  "pins.md",
+  "ulw-scope.md",
+  "ulw-dag.json",
+  "lookups.jsonl",
+  "feedback/<name>.jsonl",
+  "feedback/<name>.jsonl.<PID>.taking",
+  "logs/<name>.log",
+  "logs/<name>.jsonl",
+  "ulw-research/<session>/brief.md",
+  "ulw-research/<session>/claim-graph.md",
+  "ulw-research/<session>/intent-diff.md",
+  "ulw-research/<session>/observation-manifest.md",
+  "ulw-research/<session>/verification-economics.md",
+  "ulw-research/<session>/cause-disappearance.md",
+  "ulw-research/<session>/excursion-log.md",
+  "ulw-research/<session>/expansion-log.md",
+  "ulw-research/<session>/sources-ledger.md",
+  "ulw-research/<session>/debate-log.md",
+  "ulw-research/<session>/scope.md",
+  "ulw-research/<session>/plan.md",
+  "ulw-research/<session>/outcome.json",
+  "ulw-research/<session>/verify-*.md"
+]);
+const coreOwnedRE = new RegExp('(?:^|/)\\.lazyneon/(?:' + CORE_OWNED_PATHS.map(pattern =>
+  pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    .replaceAll('<session>', '[^/]+').replaceAll('<name>', '[^/]+')
+    .replaceAll('<PID>', '\\d+').replaceAll('\\*', '[^/]+')
+).join('|') + ')$', 'i');
 export function isCoreOwned(target) {
-  const owned = p => /(?:^|\/)\.lazyneon\/(?:ulw-research\/[^/]+\/(?:intent-diff\.md|observation-manifest\.md|verification-economics\.md|cause-disappearance\.md|excursion-log\.md|expansion-log\.md|sources-ledger\.md|brief\.md|claim-graph\.md|debate-log\.md|scope\.md|plan\.md|outcome\.json|SYNTHESIS\.md|report\.(?:md|html)|verify-[^/]+\.md|sources\/.+)|pins\.md|ulw-scope\.md|ulw-dag\.json|lookups\.jsonl|feedback\/[^/]+\.jsonl(?:\.\d+\.taking)?|logs\/[^/]+\.(?:log|jsonl))$/i.test(p.replace(/\\/g,'/'));
+  const owned = p => coreOwnedRE.test(p.replace(/\\/g, '/'));
   // Resolve aliases before deciding ownership; preserve the missing suffix so
   // an existing .lazyneon ancestor cannot exempt arbitrary new reports.
   let p=path.resolve(target), suffix=[];

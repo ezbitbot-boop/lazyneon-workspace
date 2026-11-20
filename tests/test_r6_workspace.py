@@ -118,24 +118,33 @@ def test_completed_verdict_survives_kill(ctx):
         proc.kill(); proc.wait()
 
 @pytest.mark.parametrize('guard',GUARDS)
-def test_core_research_reports_excluded_user_controls_checked(ctx,guard):
+def test_core_research_reports_checked_and_journals_excluded(ctx,guard):
     folder=ctx/'.lazyneon/ulw-research/s'; (folder/'sources').mkdir(parents=True)
-    for n in ['report.md','report.html','SYNTHESIS.md','verify-x.md']:
-        (folder/n).write_text('민법 제1500조 명백히 입증 '+'a'*64)
+    for n in ['report.md','report.html','SYNTHESIS.md']:
+        (folder/n).write_text('증거 보고서: 민법 제1500조 명백히 입증 SHA-256: '+'a'*64)
         p=event(ctx,{'path':str(folder/n)})
         r=run(guard,p,*(['post-tool-use'] if guard==GUARDS[0] else []))
         if guard != GUARDS[0]:
-            # Same contents/name outside core state must yield the same verdict.
             control_folder=ctx/'ulw-research/s'
             (control_folder/'sources').mkdir(parents=True,exist_ok=True)
             (control_folder/n).write_text((folder/n).read_text())
             control=run(guard,event(ctx,{'path':str(control_folder/n)}))
-            assert r.returncode == 0 and r.stderr == ''
+            assert r.returncode == control.returncode
             if guard != 'slop_guard.mjs' or n.startswith('report.'):
-                assert control.stderr, control.stdout
+                assert r.stderr and control.stderr
         batch(p)
-    assert rows(ctx)==[]
-    assert not (ctx/'.lazyneon-workspace/audit_trail.jsonl').exists()
+    assert len(rows(ctx))==12
+    audit=(ctx/'.lazyneon-workspace/audit_trail.jsonl').read_text()
+    for n in ['report.md','report.html','SYNTHESIS.md']:
+        assert n in audit
+        for g in ['hallucination_guard.mjs','legal_factuality_guard.mjs']:
+            assert any(row['target']==str(folder/n) and row['guard']==g and row['kind']=='fail' for row in rows(ctx))
+    before=rows(ctx)
+    for n in ['brief.md','claim-graph.md','verify-x.md']:
+        (folder/n).write_text('민법 제1500조 명백히 입증 '+'a'*64)
+        batch(event(ctx,{'path':str(folder/n)}))
+    assert rows(ctx)==before
+    assert (ctx/'.lazyneon-workspace/audit_trail.jsonl').read_text()==audit
     r=run('evidence_guard.mjs',event(ctx,{'patch':'*** Delete File: .lazyneon/evidence/a.raw'},'apply_patch'),'pre-tool-use')
     assert r.returncode==1
 
@@ -235,3 +244,12 @@ def test_slop_crash_is_not_pass(ctx):
 def test_core_owned_path_with_spaces(ctx):
     p=event(ctx,{'path':'.lazyneon/research with spaces/evidence/disk.raw'})
     assert run('evidence_guard.mjs',p,'pre-tool-use').returncode==1
+
+
+def test_synthesis_is_a_final_report_without_domain_keywords(ctx):
+    target=ctx/'.lazyneon/ulw-research/s/SYNTHESIS.md'
+    target.parent.mkdir(parents=True)
+    target.write_text('명백히 입증: 42건.')
+    result=run('hallucination_guard.mjs',event(ctx,{'path':str(target)}))
+    assert result.returncode == 1, result.stdout
+    assert '보고서 검증 FAIL' in result.stderr

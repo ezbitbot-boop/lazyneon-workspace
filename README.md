@@ -1,6 +1,6 @@
 # LazyNeon Workspace
 
-Version **0.2.0** · Plugin `lazyneon-workspace` · MIT
+Version **0.2.1** · Plugin `lazyneon-workspace` · MIT
 
 Antigravity / Gemini 4 Neon용 독립 포렌식·한국어 문서·법률 초안 companion 플러그인.
 모델 라우팅과 일반 가드는 LazyNeon core 소유다. 도메인 규칙은 [rules/GEMINI.md](rules/GEMINI.md)를 따른다.
@@ -74,7 +74,7 @@ kordoc MCP는 Node/npx가 필요하며 최초 패키지 설치에는 npm 레지�
 
 ## 코어와 상태
 
-`.lazyneon/` 전체를 제외하지 않는다. core 예약 상태 경로와 `.lazyneon/ulw-research/<session>/{SYNTHESIS.md,report.md,report.html,verify-*.md,sources/**}`만 검증·차단·해시 감사에서 제외한다. 그 밖의 사용자 파일은 검사한다.
+[도메인 가드 대상](docs/domain-targets.md)에서 core 예약 상태·작업 저널의 정확한 제외 경로와 최종 산출물 검사 범위를 확인한다.
 자체 상태는 `.lazyneon-workspace/`, 환경변수는 `LAZYNEON_WS_*`에 둔다.
 등록된 도메인 가드는 evidence_guard, hallucination_guard, legal_factuality_guard, slop_guard다.
 사후 실패는 원본을 복구하는 기능이 아니며, 수정·재검증 전 결과 제출을 금지한다.

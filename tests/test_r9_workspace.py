@@ -11,7 +11,7 @@ def js(code):
     assert p.returncode == 0, p.stderr
     return json.loads(p.stdout)
 
-@pytest.mark.parametrize('rel,owned', [('.lazyneon/ulw-research/t1/SYNTHESIS.md',True),('.lazyneon/ulw-research/t1/report.md',True),('.lazyneon/ulw-research/t1/verify-x.md',True),('.lazyneon/ulw-research/t1/sources/a.txt',True),('.lazyneon/ulw-research/brief.md',False),('.lazyneon/report.md',False)])
+@pytest.mark.parametrize('rel,owned', [('.lazyneon/ulw-research/t1/SYNTHESIS.md',False),('.lazyneon/ulw-research/t1/report.md',False),('.lazyneon/ulw-research/t1/verify-x.md',True),('.lazyneon/ulw-research/t1/sources/a.txt',False),('.lazyneon/ulw-research/brief.md',False),('.lazyneon/report.md',False)])
 def test_r9_core_paths(ctx,rel,owned):
     p=ctx/rel;p.parent.mkdir(parents=True);p.write_text('민법 제1500조.')
     batch(event(ctx,{'path':str(p)}))

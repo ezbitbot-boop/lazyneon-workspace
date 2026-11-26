@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import pytest
+from conftest import release_tree
 from test_r6_workspace import ctx, run, event, batch, rows, ROOT
 
 WRITES = [
@@ -70,14 +71,6 @@ def test_r11_bracket_phone(number):
     assert _PHONE_RE.pattern.search(number)
     assert not _PHONE_RE.pattern.search('(202) 123-4567')
 
-def cleanup(root):
-    # Only caller-created throwaway trees; always remove immutable flags before deletion.
-    if sys.platform=='darwin':subprocess.run(['chflags','-R','nouchg',str(root)],check=True)
-    for p in [root,*root.rglob('*')]:
-        if not p.is_symlink():
-            if sys.platform.startswith('linux') and __import__('shutil').which('chattr'):subprocess.run(['chattr','-i',str(p)],capture_output=True)
-            p.chmod(p.stat().st_mode|0o700)
-
 def case(ctx,*args):
     return subprocess.run(['node',str(ROOT/'scripts/case_mode.mjs'),*map(str,args)],cwd=ctx,capture_output=True,text=True)
 
@@ -87,22 +80,33 @@ def test_r11_os_protection_and_unlock(ctx):
     try:
         r=case(ctx,'init',evidence,'--out',work);assert r.returncode==0,r.stderr
         manifest=json.loads((work/'custody/hashes-start.json').read_text());assert manifest.get('protection')
-        commands=[f"perl -pi -e s/original/changed/ '{f}'",f"bash -c 'rm \"{f}\"'",f"find '{f}' -delete",f"ln -sf /etc/hosts '{f}'",f"node -e \"require('fs').copyFileSync('/etc/hosts','{f}')\"",f"{sys.executable} -c \"open('{f}','w').write('changed')\"",f"cp /etc/hosts '{f}'",f"mv '{f}' '{ctx}/moved'",f"rm '{f}'",f"echo changed | tee '{f}'",f"dd if=/etc/hosts of='{f}'",f"echo changed > '{f}'"]
         import tarfile,io
         archive=ctx/'a.tar'
         with tarfile.open(archive,'w') as t:
             info=tarfile.TarInfo('a.txt');info.size=7;t.addfile(info,io.BytesIO(b'changed'))
-        commands.append(f"tar xf '{archive}' -C '{evidence}'")
+        if os.name=='nt':  # cmd.exe syntax
+            q=f'"{f}"'
+            commands=[f'del /f /q {q}',f'attrib -R {q} && del /q {q}',f'echo changed> {q}',f'move /y {q} "{ctx}\\moved"',f'ren {q} b.txt',
+                      f"{sys.executable} -c \"open(r'{f}','w').write('changed')\"",
+                      f"powershell -NoProfile -Command \"Set-Content -LiteralPath '{f}' -Value changed\"",
+                      f"powershell -NoProfile -Command \"Remove-Item -Force -LiteralPath '{f}'\"",
+                      f'tar xf "{archive}" -C "{evidence}"']
+        else:
+            commands=[f"perl -pi -e s/original/changed/ '{f}'",f"bash -c 'rm \"{f}\"'",f"find '{f}' -delete",f"ln -sf /etc/hosts '{f}'",f"node -e \"require('fs').copyFileSync('/etc/hosts','{f}')\"",f"{sys.executable} -c \"open('{f}','w').write('changed')\"",f"cp /etc/hosts '{f}'",f"mv '{f}' '{ctx}/moved'",f"rm '{f}'",f"echo changed | tee '{f}'",f"dd if=/etc/hosts of='{f}'",f"echo changed > '{f}'",
+                      f"tar xf '{archive}' -C '{evidence}'"]
         for command in commands:
             r=subprocess.run(command,shell=True,capture_output=True,text=True)
-            assert r.returncode!=0 or (command.startswith(('perl -pi','find ')) and 'Operation not permitted' in r.stderr),command
+            # perl -pi and find report the refusal on stderr but may still exit 0:
+            # 'Operation not permitted' (macOS uchg, chattr +i) or 'Permission denied' (Linux chmod a-w).
+            # cmd's del and PowerShell's Remove-Item can exit 0 after a refusal; the hash decides.
+            assert os.name=='nt' or r.returncode!=0 or (command.startswith(('perl -pi','find ')) and ('Operation not permitted' in r.stderr or 'Permission denied' in r.stderr)),command
             assert hashlib.sha256(f.read_bytes()).hexdigest()==digest
         assert case(ctx,'verify','--case',work).returncode==0
         assert case(ctx,'unlock','--case',work).returncode!=0
         assert case(ctx,'unlock','--case',work,'--reason','throwaway regression').returncode==0
         f.write_text('changed');assert case(ctx,'close','--case',work).returncode==1
         assert 'throwaway regression' in (work/'custody/log.jsonl').read_text()
-    finally:cleanup(ctx)
+    finally:release_tree(ctx)
 
 def test_r11_close_symlink_continues(ctx):
     evidence=ctx/'input';evidence.mkdir()
@@ -110,12 +114,12 @@ def test_r11_close_symlink_continues(ctx):
     work=ctx/'work'
     try:
         assert case(ctx,'init',evidence,'--out',work).returncode==0
-        cleanup(evidence)
+        release_tree(evidence)
         (evidence/'a').unlink();(evidence/'a').symlink_to(ctx/'outside');(evidence/'b').write_text('changed');(evidence/'c').unlink()
         r=case(ctx,'close','--case',work)
         assert 'CHANGED' in r.stderr and 'MISSING' in r.stderr,r.stderr
         log=json.loads((work/'custody/log.jsonl').read_text().splitlines()[-1]);assert log['type']=='close' and len(log['changed'])==2 and len(log['missing'])==1
-    finally:cleanup(ctx)
+    finally:release_tree(ctx)
 
 @pytest.mark.parametrize('generator',['case_survey','court_evidence_sheet','generate_evidence_doc'])
 def test_r11_generated_artifact_and_tamper(ctx,generator):
@@ -174,9 +178,9 @@ def test_r11_manifest_protection(ctx,monkeypatch):
         assert evidence_manifest.main([str(evidence),'--protect','-o',str(out)])==0
         doc=json.loads(out.read_text());assert doc.get('protection')
         assert evidence_manifest.main([str(evidence),'--verify',str(out)])==0
-        cleanup(evidence)
+        release_tree(evidence)
         assert evidence_manifest.main([str(evidence),'--verify',str(out)])==1
-    finally:cleanup(ctx)
+    finally:release_tree(ctx)
 
 @pytest.mark.parametrize('variant',['NFC','NFD','uppercase','symlink'])
 def test_r11_command_aliases_and_parent_workspace(ctx,variant):
@@ -213,7 +217,7 @@ def test_r11_manifest_unlock_reason(ctx,monkeypatch):
         assert case(ctx,'unlock','--manifest',out,'--reason','test cleanup').returncode==0
         assert 'test cleanup' in Path(str(out)+'.custody.jsonl').read_text()
         (evidence/'a').write_text('new')
-    finally:cleanup(ctx)
+    finally:release_tree(ctx)
 
 def test_r11_hardlinks_rejected(ctx):
     evidence=ctx/'input';evidence.mkdir();source=evidence/'a';source.write_text('a');os.link(source,ctx/'alias')
@@ -229,9 +233,12 @@ def test_r11_whisper_binary_scratch(ctx,monkeypatch):
     sys.path.insert(0,str(ROOT/'scripts'));import local_stt
     work=ctx/'work';work.mkdir();monkeypatch.chdir(work)
     evidence=ctx/'input';evidence.mkdir();audio=evidence/'a.wav';audio.write_bytes(b'a')
-    executable=ctx/'whisper-test'
-    executable.write_text('#!'+sys.executable+'\nimport sys,json\nfrom pathlib import Path\np=Path(sys.argv[sys.argv.index("-of")+1]+".json")\np.write_text(json.dumps({"transcription":[]}))\n')
-    executable.chmod(0o700)
+    stub='import sys,json\nfrom pathlib import Path\np=Path(sys.argv[sys.argv.index("-of")+1]+".json")\np.write_text(json.dumps({"transcription":[]}))\n'
+    if os.name=='nt':  # Windows cannot execute a '#!' file; a .cmd wrapper is its executable script
+        (ctx/'whisper-test.py').write_text(stub);executable=ctx/'whisper-test.cmd'
+        executable.write_text(f'@"{sys.executable}" "{ctx/"whisper-test.py"}" %*\n')
+    else:
+        executable=ctx/'whisper-test';executable.write_text('#!'+sys.executable+'\n'+stub);executable.chmod(0o700)
     assert local_stt.transcribe_binary(str(executable),audio,'ko')['segments']==[]
     assert list(evidence.iterdir())==[audio] and list(work.iterdir())==[]
 
@@ -258,7 +265,7 @@ def test_r11_manifest_after_init(ctx,monkeypatch):
         monkeypatch.chdir(work)
         assert evidence_manifest.main([str(evidence),'-o',str(work/'manifest.json')])==0
         assert case(ctx,'close','--case',work).returncode==0
-    finally:cleanup(ctx)
+    finally:release_tree(ctx)
 
 def test_r11_dead_pid_lock(ctx):
     import socket,time
@@ -286,4 +293,4 @@ def test_r11_output_from_parent_workspace(ctx,monkeypatch):
         assert working_folder([source])==work
         assert safe_output(work/'out.json')==work/'out.json'
         with pytest.raises(ValueError):safe_output(evidence/'out.json')
-    finally:cleanup(ctx)
+    finally:release_tree(ctx)

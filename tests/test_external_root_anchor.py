@@ -43,7 +43,13 @@ def test_init_deterministic_root_and_identity(tmp_path):
     assert f'ROOT HASH: {expected}' in result.stdout
     assert '이 컴퓨터 밖' in result.stdout
     assert data['rootHash'] == expected
-    assert data['rootIdentity'] == {'device': str(evidence.stat().st_dev), 'inode': str(evidence.stat().st_ino)}
+    # Python's st_dev on Windows is the 64-bit volume serial; Node reports the 32-bit one.
+    # The record is Node's, so compare with Node; the file ID is the same in both.
+    node = subprocess.run(['node', '-e', "const s=require('fs').lstatSync(process.argv[1],{bigint:true});"
+                           "console.log(String(s.dev),String(s.ino))", str(evidence)], capture_output=True, text=True, check=True)
+    device, inode = node.stdout.split()
+    assert inode == str(evidence.stat().st_ino)
+    assert data['rootIdentity'] == {'device': device, 'inode': inode}
     other = tmp_path/'other'
     other.mkdir()
     _, _, second, _ = setup_case(other)
@@ -79,6 +85,7 @@ def test_close_without_anchor_discloses_limit(tmp_path):
     assert invalid.returncode == 2
 
 
+@pytest.mark.skipif(os.name == 'nt', reason="runs a '#!' script as the anchor command; Windows cannot execute shebang files")
 @pytest.mark.parametrize('exit_status', [0, 7])
 def test_anchor_exact_argv_once_and_failure_nonfatal(tmp_path, exit_status):
     hook = tmp_path/'anchor with spaces'

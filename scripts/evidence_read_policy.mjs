@@ -147,7 +147,8 @@ export function globWriteTouchesEvidence(command,workspace,isProtected) {
     const abs=path.resolve(workspace,target.replaceAll('\\','/'));
     const root=path.parse(abs).root;
     let matches=[root];
-    for(const seg of abs.slice(root.length).split('/').filter(Boolean)) {
+    // path.resolve returns backslashes on Windows; split on both separators.
+    for(const seg of abs.slice(root.length).split(/[\\/]/).filter(Boolean)) {
       if(!GLOB.test(seg)) {matches=matches.map(m=>path.join(m,seg));continue;}
       let re;try{re=globSegment(seg);}catch{return true;}
       matches=matches.flatMap(m=>{try{return fs.readdirSync(m).filter(n=>re.test(n)).map(n=>path.join(m,n));}catch{return [];}});

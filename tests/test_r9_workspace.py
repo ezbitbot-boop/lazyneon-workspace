@@ -122,6 +122,7 @@ def test_r9_json_brief(ctx):
     p=ctx/'outcome.json';p.write_text(json.dumps({'text':'민법 제1500조.'},ensure_ascii=False))
     assert run('legal_factuality_guard.mjs',event(ctx,{'path':str(p)})).returncode==1
 
+@pytest.mark.skipif(sys.platform == 'win32', reason="runs a '#!' script as LAZYNEON_WS_PYTHON; Windows cannot execute shebang files")
 def test_r9_morph_reason(ctx):
     import shlex
     wrapper=ctx/'python-no-site';wrapper.write_text('#!/bin/sh\nexec '+shlex.quote(sys.executable)+' -S '+shlex.quote(str(ROOT/'tests/morph_without_engine.py'))+' "$@"\n');wrapper.chmod(0o755)

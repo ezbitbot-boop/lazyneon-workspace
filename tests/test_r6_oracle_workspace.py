@@ -7,9 +7,17 @@ import pytest
 from test_r6_workspace import ROOT, GUARDS, ctx, event, run
 
 
-def rows(ctx):
+# PreInvocation deletes the queue it delivers; post() keeps what it saw for assertions.
+DELIVERED = {}
+
+
+def queued(ctx):
     return [json.loads(line) for p in (ctx/'.lazyneon-workspace/feedback').glob('*.jsonl')
             for line in p.read_text().splitlines()]
+
+
+def rows(ctx):
+    return DELIVERED.get(str(ctx), []) + queued(ctx)
 
 
 def dispatch(stage, payload):
@@ -29,7 +37,10 @@ def dispatch(stage, payload):
 def post(ctx, patch):
     payload = event(ctx, {'patch': '*** Begin Patch\n'+patch+'\n*** End Patch'}, 'apply_patch')
     assert all(r.returncode == 0 for r in dispatch('PostToolUse', payload))
-    return json.loads(dispatch('PreInvocation', payload)[0].stdout)
+    DELIVERED.setdefault(str(ctx), []).extend(queued(ctx))
+    delivered = json.loads(dispatch('PreInvocation', payload)[0].stdout)
+    assert queued(ctx) == []
+    return delivered
 
 
 def test_deleted_patch_target_has_no_content_verdict(ctx):

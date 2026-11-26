@@ -7,6 +7,7 @@ except ModuleNotFoundError:
 # One execution identity for the entire protection operation, including large journals.
 _WORKSPACE_PROVENANCE = workspace_provenance()
 import json
+import re
 import copy
 import os
 from pathlib import Path
@@ -15,6 +16,12 @@ import stat
 import subprocess
 import sys
 import tempfile
+
+# icacls specific rights only. The simple rights W and D include SYNCHRONIZE, so denying
+# them also blocks reading and listing. WD/AD: write data/append (a directory: add file/
+# subdirectory); WEA/WA: extended attributes and attributes, so the read-only attribute
+# cannot be cleared; DE/DC: delete, rename, move out, delete child.
+WINDOWS_DENY = ('WD', 'AD', 'WEA', 'WA', 'DE', 'DC')
 
 
 def command(*args):
@@ -26,6 +33,15 @@ def checked(*args):
     if result.returncode:
         raise PermissionError(f"{' '.join(args)}: {result.stderr or result.stdout}")
     return result.stdout
+
+# NTFS file IDs exceed 2**53; the record passes through Node (case_mode.mjs), whose JSON
+# numbers would round them and every later identity check would fail. Store decimal strings.
+def identity(s):
+    return str(s.st_dev), str(s.st_ino)
+
+
+def same_identity(s, e):
+    return identity(s) == (str(e.get('dev')), str(e.get('ino')))
 
 
 def read_only_media(p):
@@ -64,8 +80,9 @@ def protect(paths, journal=None):
                 raise ValueError(f'Unsupported evidence entry: {p}')
             if p.is_file() and s.st_nlink > 1:
                 raise ValueError(f'Hard-linked evidence unsupported: {p}')
-            entries.append({'path': str(p), 'mode': stat.S_IMODE(s.st_mode), 'dev': s.st_dev,
-                            'ino': s.st_ino, 'original_flags': getattr(s, 'st_flags', 0), 'applied': []})
+            dev, ino = identity(s)
+            entries.append({'path': str(p), 'mode': stat.S_IMODE(s.st_mode), 'dev': dev,
+                            'ino': ino, 'original_flags': getattr(s, 'st_flags', 0), 'applied': []})
     # An existing matching lock record owns the pre-lock mode/flags. Inherit
     # that recovery state rather than treating already locked modes as original.
     from evidence_output import registries
@@ -74,7 +91,7 @@ def protect(paths, journal=None):
         previous = doc.get('protection') or {}
         if previous.get('platform') == sys.platform:
             for old in previous.get('entries', []):
-                originals[(old.get('path'), old.get('dev'), old.get('ino'))] = old
+                originals[(old.get('path'), str(old.get('dev')), str(old.get('ino')))] = old
     for e in entries:
         old = originals.get((e['path'], e['dev'], e['ino']))
         if old:
@@ -125,14 +142,17 @@ def protect(paths, journal=None):
                     e.setdefault('original_acl_hex', saved.read_bytes().hex())
                 apply('attrib +R', lambda: checked('attrib', '+R', str(p)),
                       lambda: bool(p.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_READONLY))
-                apply('deny-write ACL', lambda: checked('icacls', str(p), '/deny', f'{user}:(W,D,DC)'),
+                apply('deny-write ACL', lambda: checked('icacls', str(p), '/deny', f"{user}:({','.join(WINDOWS_DENY)})"),
                       lambda: acl_present(e))
             elif sys.platform.startswith('linux'):
                 journal_event(journal, 'intent', path=str(p), mechanism='chattr +i', entry=e)
                 if shutil.which('chattr') and command('chattr', '+i', str(p)).returncode == 0:
                     e['applied'].append('chattr +i')
             e['status'] = 'protected' if e['applied'] else 'not-lockable'
-            if not any(x in e['applied'] for x in ('uchg', 'chattr +i', 'deny-write ACL')):
+            # Windows needs both: the deny ACE names only the current user, while the
+            # read-only attribute makes DeleteFile refuse every caller.
+            locked = {'uchg', 'chattr +i'} & set(e['applied']) or {'deny-write ACL', 'attrib +R'} <= set(e['applied'])
+            if not locked:
                 e['status'] = 'not-lockable'
                 record['notes'].append(f"{p}: not lockable by immutable flag/ACL; applied: {e['applied']}")
             journal_event(journal, 'protected', entry=e)
@@ -148,9 +168,15 @@ def protect(paths, journal=None):
 
 
 def acl_present(e):
-    acl = checked('icacls', e['path'])
-    return any(e['user'].lower() in line.lower() and '(DENY)' in line and
-               all(x in line for x in ['W', 'D', 'DC']) for line in acl.splitlines())
+    """True when the recorded user holds an explicit deny ACE with exactly WINDOWS_DENY."""
+    ace = re.compile(r'(?:^|\s)' + re.escape(e['user']) + r':((?:\([^)]*\))+)\s*$', re.IGNORECASE)
+    for line in checked('icacls', e['path']).splitlines():
+        match = ace.search(line)
+        if match:
+            flags = re.findall(r'\(([^)]*)\)', match.group(1))
+            if flags[:-1] == ['DENY'] and set(flags[-1].split(',')) == set(WINDOWS_DENY):
+                return True
+    return False
 
 
 def lock(record, journal=None):
@@ -159,7 +185,7 @@ def lock(record, journal=None):
     # Do not replace the baseline identities or original modes when relocking.
     for e in record['entries']:
         s = Path(e['path']).lstat()
-        if stat.S_ISLNK(s.st_mode) or (s.st_dev, s.st_ino) != (e['dev'], e['ino']):
+        if stat.S_ISLNK(s.st_mode) or not same_identity(s, e):
             raise ValueError('PROTECTION identity changed: ' + e['path'])
     fresh = protect([e['path'] for e in record['entries']], journal=journal)
     missing = verify(record)
@@ -207,7 +233,7 @@ def unlock(record, strict=True):
         except FileNotFoundError:
             problems.append(f'missing: {p}')
             continue
-        if stat.S_ISLNK(s.st_mode) or ('dev' in e and 'ino' in e and (s.st_dev, s.st_ino) != (e['dev'], e['ino'])):
+        if stat.S_ISLNK(s.st_mode) or ('dev' in e and 'ino' in e and not same_identity(s, e)):
             problems.append(f'identity changed: {p}')
             continue
         targets.append(e)
@@ -234,7 +260,7 @@ def verify(record):
         p = Path(e['path'])
         try:
             s = p.lstat()
-            if p.is_symlink() or (s.st_dev, s.st_ino) != (e['dev'], e['ino']):
+            if p.is_symlink() or not same_identity(s, e):
                 problems.append(f'PROTECTION identity changed: {p}')
             if e.get('status') == 'protected-by-media' and not read_only_media(p):
                 problems.append(f'PROTECTION read-only media missing: {p}')
@@ -243,12 +269,10 @@ def verify(record):
                 problems.append(f'PROTECTION uchg missing: {p}')
             if 'chattr +i' in e['applied'] and 'i' not in checked('lsattr', '-d', str(p)).split()[0]:
                 problems.append(f'PROTECTION immutable missing: {p}')
-            if 'attrib +R' in e['applied'] and not s.st_file_attributes & stat.FILE_ATTRIBUTE_READONLY:
+            if ('attrib +R' in e['applied'] or 'deny-write ACL' in e['applied']) and not s.st_file_attributes & stat.FILE_ATTRIBUTE_READONLY:
                 problems.append(f'PROTECTION read-only attribute missing: {p}')
-            if 'deny-write ACL' in e['applied']:
-                acl = checked('icacls', str(p))
-                if not any(e['user'].lower() in line.lower() and '(DENY)' in line and all(x in line for x in ['W','D','DC']) for line in acl.splitlines()):
-                    problems.append(f'PROTECTION deny-write ACL missing: {p}')
+            if 'deny-write ACL' in e['applied'] and not acl_present(e):
+                problems.append(f'PROTECTION deny-write ACL missing: {p}')
         except OSError as exc:
             problems.append(f'PROTECTION unavailable: {p}: {exc}')
     return problems

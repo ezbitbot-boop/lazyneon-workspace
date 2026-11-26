@@ -6,7 +6,8 @@ import subprocess
 import sys
 import pytest
 from test_r6_workspace import ctx, run, event, ROOT
-from test_r11_workspace import case, cleanup
+from conftest import release_tree
+from test_r11_workspace import case
 
 READS = [
     *[f'lazyforensic {sub} evidence/a' for sub in 'dedup similar kw archive pdf db vcheck vfp afp video deepfake mft telegram'.split()],
@@ -42,7 +43,7 @@ def test_r12_manifest_is_observational(ctx, output):
         assert f.stat().st_mode==before
         assert not getattr(f.stat(),'st_flags',0)&2
         (evidence/'new').write_text('new')
-    finally:cleanup(ctx)
+    finally:release_tree(ctx)
 
 def test_r12_large_init_and_durable_journal(ctx):
     evidence=ctx/'data';evidence.mkdir()
@@ -54,7 +55,7 @@ def test_r12_large_init_and_durable_journal(ctx):
         assert journal.exists()
         assert len(journal.read_text().splitlines())>=4502
         assert case(ctx,'close','--case',work).returncode==0
-    finally:cleanup(ctx)
+    finally:release_tree(ctx)
 
 def test_r12_relock_lifecycle(ctx):
     evidence=ctx/'data';evidence.mkdir();(evidence/'a').write_text('a');work=ctx/'work'
@@ -66,7 +67,7 @@ def test_r12_relock_lifecycle(ctx):
         assert 'unlock' in r.stdout
         assert case(ctx,'unlock','--case',work,'--reason','done').returncode==0
         (evidence/'a').write_text('b')
-    finally:cleanup(ctx)
+    finally:release_tree(ctx)
 
 def test_r12_root_swap_detected(ctx):
     parent=ctx/'parent';parent.mkdir();evidence=parent/'data';evidence.mkdir();(evidence/'a').write_text('a');work=ctx/'work'
@@ -75,7 +76,7 @@ def test_r12_root_swap_detected(ctx):
         parent.rename(ctx/'moved');parent.mkdir();evidence.symlink_to(ctx/'moved/data',target_is_directory=True)
         r=case(ctx,'close','--case',work)
         assert r.returncode==1 and 'identity changed' in r.stderr
-    finally:cleanup(ctx)
+    finally:release_tree(ctx)
 
 def test_r12_required_parser_dependency_fails_closed():
     # Test the existing test itself in a child with imports blocked, no installed
@@ -111,8 +112,12 @@ def test_r12_unsupported_flags_are_honest(ctx,monkeypatch):
     evidence=ctx/'data';evidence.mkdir();(evidence/'a').write_text('a')
     # A filesystem can return success without applying mode/flag changes (FAT).
     monkeypatch.setattr(Path,'chmod',lambda *a,**kw:None)
-    monkeypatch.setattr(ep,'checked',lambda *a:'')
     if hasattr(os,'chflags'):monkeypatch.setattr(os,'chflags',lambda *a:None)
+    def silent(*args):
+        # Success without effect; Windows protect reads back the ACL it asked icacls to save.
+        if args[0]=='icacls' and '/save' in args:Path(args[args.index('/save')+1]).write_bytes(b'')
+        return ''
+    monkeypatch.setattr(ep,'checked',silent)
     monkeypatch.setattr(ep,'command',lambda *a:subprocess.CompletedProcess(a,1,'','unsupported'))
     try:
         record=ep.protect([evidence])
@@ -134,7 +139,7 @@ def test_r12_lock_failure_rolls_back_with_journal(ctx,monkeypatch):
         assert f.stat().st_mode==mode and not getattr(f.stat(),'st_flags',0)&2
         rows=[json.loads(line) for line in journal.read_text().splitlines()]
         assert rows[0]['event']=='prepared' and rows[-1]['event']=='rolled-back'
-    finally:cleanup(ctx)
+    finally:release_tree(ctx)
 
 @pytest.mark.parametrize('bad', [False,True])
 def test_r12_morph_unavailable_cli_hook_parity(ctx,bad):
@@ -163,7 +168,7 @@ def test_r12_hardlink_manifest_error_no_traceback(ctx):
     try:
         r=subprocess.run([sys.executable,str(ROOT/'scripts/evidence_manifest.py'),str(evidence),'--protect','-o',str(ctx/'manifest.json')],capture_output=True,text=True)
         assert r.returncode==2 and 'Hard-linked evidence' in r.stderr and 'Traceback' not in r.stderr
-    finally:cleanup(ctx)
+    finally:release_tree(ctx)
 
 def test_r12_manifest_then_init_restores_modes(ctx):
     evidence=ctx/'data';evidence.mkdir();f=evidence/'a';f.write_text('a');mode=f.stat().st_mode;work=ctx/'work'
@@ -173,7 +178,7 @@ def test_r12_manifest_then_init_restores_modes(ctx):
         assert case(ctx,'init',evidence,'--out',work).returncode==0
         assert case(ctx,'unlock','--case',work,'--reason','done').returncode==0
         assert f.stat().st_mode==mode and not getattr(f.stat(),'st_flags',0)&2
-    finally:cleanup(ctx)
+    finally:release_tree(ctx)
 
 def test_r12_legacy_case_close_and_unlock(ctx):
     import hashlib
@@ -253,7 +258,7 @@ def test_r12_cross_os_is_explicitly_unverified(ctx):
         baseline=work/'custody/hashes-start.json';doc=json.loads(baseline.read_text());doc['protection']['platform']='foreign-os';baseline.write_text(json.dumps(doc))
         r=case(ctx,'close','--case',work);assert r.returncode==0 and '보호 미검증' in r.stderr
         r=case(ctx,'unlock','--case',work,'--reason','handover');assert r.returncode!=0 and 'recorded OS' in r.stderr and 'Traceback' not in r.stderr
-    finally:cleanup(ctx)
+    finally:release_tree(ctx)
 
 def test_r12_runtime_uses_interpreter_candidates(ctx,monkeypatch):
     # Legacy explicit interpreter is part of the existing runtime contract.
@@ -263,7 +268,7 @@ def test_r12_runtime_uses_interpreter_candidates(ctx,monkeypatch):
     try:
         r=case(ctx,'init',evidence,'--out',ctx/'work')
         assert r.returncode!=0 and 'Python 3 unavailable' in r.stderr
-    finally:cleanup(ctx)
+    finally:release_tree(ctx)
 
 def test_r12_interrupted_lock_journal_can_unlock(ctx):
     evidence=ctx/'data';evidence.mkdir();f=evidence/'a';f.write_text('a');mode=f.stat().st_mode
@@ -285,7 +290,7 @@ ep.protect([sys.argv[2]],journal=sys.argv[3])
         r=case(ctx,'unlock','--journal',journal,'--reason','interrupted init recovery')
         assert r.returncode==0,r.stderr
         assert f.stat().st_mode==mode
-    finally:cleanup(ctx)
+    finally:release_tree(ctx)
 
 @pytest.mark.parametrize('valid_hash',[False,True])
 def test_r12_artifact_header_does_not_exempt_hashes(ctx,valid_hash):
@@ -313,7 +318,7 @@ def test_r12_unprotected_hardlink_manifest_is_readonly(ctx):
         r=subprocess.run([sys.executable,str(ROOT/'scripts/evidence_manifest.py'),str(evidence),'-o',str(ctx/'manifest.json')],capture_output=True,text=True)
         assert r.returncode==0 and 'Traceback' not in r.stderr,r.stderr
         assert f.stat().st_mode==mode
-    finally:cleanup(ctx)
+    finally:release_tree(ctx)
 
 @pytest.mark.parametrize('script,flags',[
  ('audio_survey.py','evidence/a --threshold 0.1 --json'),

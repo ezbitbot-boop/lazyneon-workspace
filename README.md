@@ -113,7 +113,8 @@ kordoc MCP는 Node/npx가 필요하며 최초 패키지 설치에는 npm 레지�
 ## 검증과 한계
 
 `python -m pytest`는 pytest 설정의 `not kakao` 마커와 수집 제외 규칙을 적용한다.
-`node --test test/workspace_contract.test.mjs`로 Node 계약 테스트를 실행한다.
+`node --test test/*.test.mjs`로 Node 계약 테스트를 실행한다(PowerShell에서는 Git Bash 등 glob을 펼치는 셸에서 실행).
+GitHub Actions(`.github/workflows/workspace-tests.yml`)가 Node 20–25 × Ubuntu/macOS/Windows로 Node 테스트를, Python 3.12 × 같은 세 OS로 pytest를 돌린다.
 kakao라는 이름을 포함한 테스트·스크립트 실행은 소유자 규칙상 금지한다. 다른 테스트 파일의 내부 호출도 확인해야 한다.
 HWP5 OLE 경로에는 `olefile`이 필요하다. 미설치 시 설치 안내 오류를 반환한다.
 네트워크 STT는 `--upload-audio` 명시적 동의가 필요하며, 실제 서버 전사는 이번 검증에 포함하지 않는다.
@@ -174,11 +175,25 @@ custody 로그에 exitStatus(실행 불가 시 null)·signal·error를 기록하
 
 SessionStart는 최대 24시간에 한 번 짧은 제한시간으로 origin의 main ref만 조회합니다. 로컬 객체로 선후 관계가 확인되면 한 줄 `update available` 안내를 표시합니다. 원격 커밋 객체가 없으면 `update available`에 선후 관계 미확인임을 함께 표시합니다. 자동 fetch/pull 및 코드 변경은 없습니다. 확인 시각은 사용자 `~/.cache/lazyneon-workspace`에 저장합니다. `LAZYNEON_OFFLINE=1` 또는 `LAZYNEON_WS_NO_UPDATE_CHECK=1`이면 확인하지 않습니다.
 
-로컬 변경(미추적 파일 포함)이 있으면 거부하는 수동 업데이트 한 줄 (`<plugin>`을 설치 경로로 교체):
+로컬 변경(미추적 파일 포함)이 있으면 거부하는 수동 업데이트 명령이다. 아래 경로는 "Install both"의 기본 설치 위치이며, 다른 곳에 받았다면 그 경로로 바꾼다. ZIP으로 받은 폴더는 Git 저장소가 아니라서 업데이트할 수 없으니 `git clone`으로 다시 받는다.
+
+macOS (Terminal):
 
 ```sh
-p='<plugin>'; s=$(git -C "$p" status --porcelain --untracked-files=normal) && { if [ -z "$s" ]; then git -C "$p" pull --ff-only; else echo 'Refusing update: local changes' >&2; false; fi; }
+p="$HOME/Plugins/lazyneon-workspace"; s=$(git -C "$p" status --porcelain --untracked-files=normal) && { if [ -z "$s" ]; then git -C "$p" pull --ff-only; else echo 'Refusing update: local changes' >&2; false; fi; }
 ```
+
+Windows (PowerShell):
+
+```powershell
+$p = "$env:USERPROFILE\Plugins\lazyneon-workspace"
+$s = git -C $p status --porcelain --untracked-files=normal
+if ($LASTEXITCODE -ne 0) { Write-Error 'git status failed' }
+elseif ($s) { Write-Error 'Refusing update: local changes' }
+else { git -C $p pull --ff-only }
+```
+
+`Refusing update`가 나오면 아무것도 바뀌지 않은 것이다. `git -C <경로> status`로 바뀐 파일을 확인한 뒤 정리하고 다시 실행한다. 업데이트 뒤에는 Antigravity에서 새 세션을 연다.
 
 `python scripts/workspace_provenance.py`는 설치된 Workspace의 버전·Git 커밋·dirty 여부를 반환합니다. 보고서 작성 시 출력값을 기록하고, 검증 시점의 출처와 구분하여 보존합니다. Git 없는 배포본의 커밋/dirty 값은 `unknown`입니다.
 

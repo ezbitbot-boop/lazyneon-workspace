@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- evidence_guard: 폴더 이름 `evidence` 검사를 작업 폴더 기준 경로에만 적용. `…/Evidence/case1` 같은 상위 폴더 이름 때문에 모든 쓰기가 막히던 문제 수정. 작업 폴더 밖 경로와 이름이 evidence인 작업 폴더는 계속 차단.
+- evidence_guard: 검사 중 예외가 나면 명시적으로 deny. Windows에서 glob 쓰기 대상을 펼치지 못하던 문제 수정.
+- domain_feedback: 전달한 판정 큐는 바로 삭제하고, 전달되지 않은 큐는 24시간 뒤 삭제.
+- README: Windows PowerShell 업데이트 명령 추가.
+- 네 도메인 가드의 stdin 읽기 함수를 `hook_workspace.mjs` 하나로 통합(동작 변화 없음).
+- case-mode Windows 증거 보호: `icacls /deny (W,D,DC)`는 SYNCHRONIZE까지 막아 증거 읽기·목록이 실패하고 close/verify가 깨졌음. 특정 권한 `(WD,AD,WEA,WA,DE,DC)` deny와 읽기 전용 속성으로 바꿔 쓰기·생성·삭제·이름 변경·밖으로 이동·읽기 전용 해제(`del /f`, `Remove-Item -Force` 포함)는 막고 읽기·목록은 허용. verify는 정확히 이 deny 집합과 읽기 전용 속성이 모두 있어야 통과.
+- GitHub Actions: Node 20–25 × 3 OS 계약 테스트, Python 3.12 × 3 OS pytest.
+
 ## 0.2.2 — 2026-11-26
 
 - evidence_guard: glob 쓰기 대상이 증거와 겹치면, 증거가 있는 작업 폴더에서 인라인 인터프리터(`node -e`, `python -c` 등)가 계산된 경로를 쓰거나 지우면, ffmpeg의 가운데 출력 인자가 증거면 거부.

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import {isCoreOwned, dispatchTargets} from './hook_targets.mjs';
 import { pythonCandidates, isPythonLauncherStub } from './python_runtime.mjs';
-import { workspaceFromSources, resolveTarget } from './hook_workspace.mjs';
+import { workspaceFromSources, resolveTarget, readGuardStdin } from './hook_workspace.mjs';
 let workspace = null;
 /**
  * legal_factuality_guard.mjs — PostToolUse Legal and Precedent Hallucination Guard
@@ -13,46 +13,8 @@ import path from "path";
 import { spawnSync } from "child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { stdin } from "node:process";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-
-// 완성된 JSON 은 조기 리졸브로 바로 끝나므로 상한은 호스트가 늦게 보낼 때만 쓰인다.
-// 50ms 일 때 늦게 온 입력을 버리고 통과(fail-open)시켜 1500ms 로 되돌렸다.
-const STDIN_WAIT_MS = 1500;
-
-function readStdin(limitMs = STDIN_WAIT_MS) {
-	return new Promise((resolve) => {
-		if (stdin.isTTY) {
-			resolve("");
-			return;
-		}
-		const chunks = [];
-		let settled = false;
-		const finish = (value) => {
-			if (settled) return;
-			settled = true;
-			clearTimeout(timer);
-			try { stdin.pause(); } catch {}
-			stdin.removeAllListeners();
-			resolve(value);
-		};
-		const timer = setTimeout(() => finish(Buffer.concat(chunks).toString("utf8")), limitMs);
-		if (typeof timer.unref === "function") timer.unref();
-		stdin.on("data", (chunk) => {
-			chunks.push(chunk);
-			const acc = Buffer.concat(chunks).toString("utf8").trim();
-			if ((acc.startsWith("{") && acc.endsWith("}")) || (acc.startsWith("[") && acc.endsWith("]"))) {
-				try {
-					JSON.parse(acc);
-					finish(acc);
-				} catch {}
-			}
-		});
-		stdin.on("end", () => finish(Buffer.concat(chunks).toString("utf8")));
-		stdin.on("error", () => finish(""));
-	});
-}
 
 function tryParseJson(text) {
 	if (!text) return undefined;
@@ -73,7 +35,7 @@ async function collectSources() {
 	for (const k of ["ANTIGRAVITY_TOOL_INPUT", "TOOL_INPUT", "ANTIGRAVITY_TARGET_FILE", "TARGET_FILE"]) {
 		if (process.env[k]) push(process.env[k], `env:${k}`);
 	}
-	push(await readStdin(STDIN_WAIT_MS), "stdin");
+	push(await readGuardStdin(), "stdin");
 	for (const arg of process.argv.slice(2)) push(arg, "argv");
 	return sources;
 }

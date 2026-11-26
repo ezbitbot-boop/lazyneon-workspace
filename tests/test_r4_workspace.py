@@ -18,6 +18,7 @@ import pii_mask
 @pytest.fixture(autouse=True)
 def isolated_feedback_home(tmp_path, monkeypatch):
     monkeypatch.setenv('HOME', str(tmp_path))
+    monkeypatch.setenv('USERPROFILE', str(tmp_path))  # os.homedir() on Windows
 
 def node(script, *args, payload=None, cwd=ROOT):
     return subprocess.run(['node', str(ROOT/'scripts'/script), *map(str, args)], input=json.dumps(payload or {}), text=True, capture_output=True, cwd=cwd, env={**os.environ, 'LAZYNEON_WS_PYTHON': sys.executable}, timeout=60)

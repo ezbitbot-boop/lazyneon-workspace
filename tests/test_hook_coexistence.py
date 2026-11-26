@@ -22,6 +22,7 @@ def core_root():
 @pytest.mark.parametrize('reverse',[False,True])
 def test_registered_hook_coexistence(tmp_path, monkeypatch, reverse):
     monkeypatch.setenv('HOME',str(tmp_path))
+    monkeypatch.setenv('USERPROFILE',str(tmp_path))
     monkeypatch.setenv('LAZYNEON_OFFLINE','1')
     monkeypatch.setenv('LAZYNEON_WS_PYTHON',sys.executable)
     monkeypatch.setenv('LAZYNEON_FEEDBACK_DIR',str(tmp_path/'.lazyneon/feedback'))

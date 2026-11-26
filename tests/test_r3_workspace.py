@@ -101,7 +101,7 @@ def test_workspace_payload_pins_and_case_audit(tmp_path):
     assert result.returncode == 1, result.stderr
     assert '근거 없는 해시' in result.stderr
     assert json.loads(result.stdout)['decision'] == 'block'
-    relay_env = {**os.environ, 'HOME': str(tmp_path), 'LAZYNEON_WS_PYTHON': sys.executable}
+    relay_env = {**os.environ, 'HOME': str(tmp_path), 'USERPROFILE': str(tmp_path), 'LAZYNEON_WS_PYTHON': sys.executable}
     feedback = tmp_path/'.lazyneon-workspace/feedback'
     for action in ('batch', 'inject'):
         relay = subprocess.run(['node', str(ROOT/'scripts/domain_feedback.mjs'), action, *(['hallucination_guard.mjs'] if action == 'batch' else [])], input=json.dumps(payload), text=True, capture_output=True, env=relay_env, timeout=30)

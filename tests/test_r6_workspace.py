@@ -12,6 +12,7 @@ GUARDS = ['evidence_guard.mjs', 'hallucination_guard.mjs', 'legal_factuality_gua
 @pytest.fixture
 def ctx(tmp_path, monkeypatch):
     monkeypatch.setenv('HOME', str(tmp_path))
+    monkeypatch.setenv('USERPROFILE', str(tmp_path))  # os.homedir() on Windows
     monkeypatch.setenv('LAZYNEON_WS_PYTHON', sys.executable)
     monkeypatch.setenv('LAZYNEON_OFFLINE', '1')
     return tmp_path

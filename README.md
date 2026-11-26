@@ -113,7 +113,8 @@ kordoc MCP는 Node/npx가 필요하며 최초 패키지 설치에는 npm 레지�
 ## 검증과 한계
 
 `python -m pytest`는 pytest 설정의 `not kakao` 마커와 수집 제외 규칙을 적용한다.
-`node --test test/workspace_contract.test.mjs`로 Node 계약 테스트를 실행한다.
+`node --test test/*.test.mjs`로 Node 계약 테스트를 실행한다(PowerShell에서는 Git Bash 등 glob을 펼치는 셸에서 실행).
+GitHub Actions(`.github/workflows/workspace-tests.yml`)가 Node 20–25 × Ubuntu/macOS/Windows로 Node 테스트를, Python 3.12 × 같은 세 OS로 pytest를 돌린다.
 kakao라는 이름을 포함한 테스트·스크립트 실행은 소유자 규칙상 금지한다. 다른 테스트 파일의 내부 호출도 확인해야 한다.
 HWP5 OLE 경로에는 `olefile`이 필요하다. 미설치 시 설치 안내 오류를 반환한다.
 네트워크 STT는 `--upload-audio` 명시적 동의가 필요하며, 실제 서버 전사는 이번 검증에 포함하지 않는다.

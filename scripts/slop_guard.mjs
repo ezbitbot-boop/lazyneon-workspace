@@ -7,10 +7,9 @@
  *   CLI:         node scripts/slop_guard.mjs --file <path> → JSON 결과
  */
 import {contentTargets, isCoreOwned} from './hook_targets.mjs';
-import { resolveWorkspace, resolveTarget } from './hook_workspace.mjs';
+import { resolveWorkspace, resolveTarget, readGuardStdin } from './hook_workspace.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
-import { stdin } from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -189,33 +188,6 @@ function warning(file, res) {
 	return `${parts.join('\n')}\n`;
 }
 
-function readStdin(limitMs = 1500) {
-	return new Promise((resolve) => {
-		if (stdin.isTTY) return resolve('');
-		const chunks = [];
-		let settled = false;
-		const finish = (v) => {
-			if (settled) return;
-			settled = true;
-			clearTimeout(timer);
-			try { stdin.pause(); } catch {}
-			stdin.removeAllListeners();
-			resolve(v);
-		};
-		const timer = setTimeout(() => finish(Buffer.concat(chunks).toString('utf8')), limitMs);
-		timer.unref?.();
-		stdin.on('data', (c) => {
-			chunks.push(c);
-			const acc = Buffer.concat(chunks).toString('utf8').trim();
-			if ((acc.startsWith('{') && acc.endsWith('}')) || (acc.startsWith('[') && acc.endsWith(']'))) {
-				try { JSON.parse(acc); finish(acc); } catch {}
-			}
-		});
-		stdin.on('end', () => finish(Buffer.concat(chunks).toString('utf8')));
-		stdin.on('error', () => finish(''));
-	});
-}
-
 function targetOf(payload) {
 	for (const a of [payload?.toolCall?.args, payload?.tool_input, payload?.toolInput, payload?.args]) {
 		if (a && typeof a === 'object') {
@@ -230,7 +202,7 @@ function targetOf(payload) {
 async function hook() {
     let warned=false, checked=false;
 	let payload = {};
-	try { payload = JSON.parse((await readStdin(1500)) || '{}'); } catch {}
+	try { payload = JSON.parse((await readGuardStdin()) || '{}'); } catch {}
 	for (const file of contentTargets([{parsed:payload}]).filter(t => !isCoreOwned(t))) {
 	if (file && TEXT_EXT_RE.test(file) && REPORT_NAME_RE.test(path.basename(file)) && fs.existsSync(file)) {
         checked=true;

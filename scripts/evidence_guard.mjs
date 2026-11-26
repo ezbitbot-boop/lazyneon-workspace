@@ -2,7 +2,7 @@
 import {shellCommands,evidenceTokens,readOnlyEvidenceCommand,globWriteTouchesEvidence,inlineComputedWrite,workspaceHoldsEvidence} from './evidence_read_policy.mjs';
 import { evidenceIdentity } from './evidence_identity.mjs';
 import {hookTargets, isCoreOwned, dispatchTargets, shellWriteTargets} from './hook_targets.mjs';
-import { workspaceFromSources, resolveTarget } from './hook_workspace.mjs';
+import { workspaceFromSources, resolveTarget, readGuardStdin } from './hook_workspace.mjs';
 let workspace = null;
 let protectedIdentity = () => false;
 /**
@@ -24,7 +24,6 @@ import os from 'node:os';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'node:url';
-import { stdin } from 'node:process';
 
 const hookType = (process.argv[2] || 'pre-tool-use').replace(/_/g, '-');
 
@@ -32,43 +31,6 @@ const hookType = (process.argv[2] || 'pre-tool-use').replace(/_/g, '-');
 // 입력 수집: 각 소스를 독립 보관 (JSON.parse 는 소스별로 따로 시도한다 —
 // 서로 다른 소스를 '\n'으로 합쳐 파싱하면 어느 한쪽만 있어도 파싱이 깨진다)
 // ---------------------------------------------------------------------------
-
-// 완성된 JSON 은 조기 리졸브로 바로 끝나므로 상한은 호스트가 늦게 보낼 때만 쓰인다.
-// 50ms 일 때 늦게 온 입력을 버리고 통과(fail-open)시켜 1500ms 로 되돌렸다.
-const STDIN_WAIT_MS = 1500;
-
-function readStdin(limitMs = STDIN_WAIT_MS) {
-	return new Promise((resolve) => {
-		if (stdin.isTTY) {
-			resolve('');
-			return;
-		}
-		const chunks = [];
-		let settled = false;
-		const finish = (value) => {
-			if (settled) return;
-			settled = true;
-			clearTimeout(timer);
-			try { stdin.pause(); } catch {}
-			stdin.removeAllListeners();
-			resolve(value);
-		};
-		const timer = setTimeout(() => finish(Buffer.concat(chunks).toString('utf8')), limitMs);
-		if (typeof timer.unref === 'function') timer.unref();
-		stdin.on('data', (chunk) => {
-			chunks.push(chunk);
-			const acc = Buffer.concat(chunks).toString('utf8').trim();
-			if ((acc.startsWith('{') && acc.endsWith('}')) || (acc.startsWith('[') && acc.endsWith(']'))) {
-				try {
-					JSON.parse(acc);
-					finish(acc);
-				} catch {}
-			}
-		});
-		stdin.on('end', () => finish(Buffer.concat(chunks).toString('utf8')));
-		stdin.on('error', () => finish(''));
-	});
-}
 
 function tryParseJson(text) {
 	if (!text) return undefined;
@@ -125,7 +87,7 @@ async function collectSources() {
 		if (process.env[k]) push(process.env[k], `env:${k}`);
 	}
 	// 2) stdin JSON (Antigravity 실제 경로)
-	push(await readStdin(STDIN_WAIT_MS), 'stdin');
+	push(await readGuardStdin(), 'stdin');
 	// 3) CLI 인자로 전달된 JSON/경로 (일부 호스트)
 	for (const arg of process.argv.slice(3)) push(arg, 'argv');
 	return sources;

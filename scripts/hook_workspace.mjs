@@ -45,3 +45,41 @@ export async function readHookStdin(timeout = 1500) {
     process.stdin.resume();
   });
 }
+// Domain guards (evidence, hallucination, legal_factuality, slop) share this reader.
+// The host writes JSON and closes the pipe; a complete JSON document resolves at once,
+// so the limit only matters when the host is slow. 50ms dropped late input and let it
+// pass (fail-open), hence 1500ms. fstat().size is not used: it is 0 for pipes on Linux/Windows.
+export const GUARD_STDIN_WAIT_MS = 1500;
+export function readGuardStdin(limitMs = GUARD_STDIN_WAIT_MS) {
+	const stdin = process.stdin;
+	return new Promise((resolve) => {
+		if (stdin.isTTY) {
+			resolve('');
+			return;
+		}
+		const chunks = [];
+		let settled = false;
+		const finish = (value) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			try { stdin.pause(); } catch {}
+			stdin.removeAllListeners();
+			resolve(value);
+		};
+		const timer = setTimeout(() => finish(Buffer.concat(chunks).toString('utf8')), limitMs);
+		if (typeof timer.unref === 'function') timer.unref();
+		stdin.on('data', (chunk) => {
+			chunks.push(chunk);
+			const acc = Buffer.concat(chunks).toString('utf8').trim();
+			if ((acc.startsWith('{') && acc.endsWith('}')) || (acc.startsWith('[') && acc.endsWith(']'))) {
+				try {
+					JSON.parse(acc);
+					finish(acc);
+				} catch {}
+			}
+		});
+		stdin.on('end', () => finish(Buffer.concat(chunks).toString('utf8')));
+		stdin.on('error', () => finish(''));
+	});
+}

@@ -478,6 +478,31 @@ def render_report(stats: dict, source: str) -> str:
     return "\n".join(lines)
 
 
+def _check_paths(args) -> None:
+    """입력, 출력, 리포트, vault가 같은 파일(경로 또는 inode)이면 거부한다."""
+    from evidence_output import identity, safe_output
+
+    def key(p):
+        try:
+            st = os.stat(p)
+            return ("ino", st.st_dev, st.st_ino)
+        except OSError:
+            return ("path", identity(p))
+
+    named = [("input", args.input), ("--output", args.output), ("--report", args.report), ("--vault", args.vault)]
+    seen: dict = {}
+    for label, p in named:
+        if not p:
+            continue
+        for k in {key(p), ("path", identity(p))}:
+            if k in seen:
+                raise ValueError(f"{label}와 {seen[k]}가 같은 파일입니다: {p} (원본 덮어쓰기 방지)")
+            seen[k] = label
+    for label, p in named[1:]:
+        if p and not (label == "--vault" and args.unmask):
+            safe_output(p, [args.input])
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="한국형 개인정보 자동 마스킹 (주민번호/전화/카드/계좌/이메일/여권/운전면허/외국인번호)")
     p.add_argument("input", help="입력 텍스트/마크다운/CSV 파일")
@@ -499,6 +524,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.unmask and not args.vault:
         print("error: --unmask는 --vault 매핑 파일이 필요합니다", file=sys.stderr)
+        return 2
+    try:
+        _check_paths(args)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
         return 2
 
     with open(args.input, "rb") as f:

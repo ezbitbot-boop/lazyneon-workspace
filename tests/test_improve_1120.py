@@ -45,7 +45,7 @@ def test_shared_windows_python_probe_contract():
 def test_release_docs_and_domain_exclusion():
     for name in ['plugin.json','package.json']:
         data=json.loads((ROOT/name).read_text())
-        assert data['version']=='0.2.1'
+        assert data['version']=='0.2.2'
         assert data['requires']=={'lazyneon':'>=0.3.0'}
     for skill in (ROOT/'skills').glob('*/SKILL.md'):
         assert 'gemini-4-hydrogen' in skill.read_text(), skill

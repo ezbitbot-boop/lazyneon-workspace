@@ -1,4 +1,4 @@
-# LazyNeon Workspace 0.2.1
+# LazyNeon Workspace 0.2.2
 
 호스트: Antigravity, Gemini 4 Neon. 모델 라우팅은 LazyNeon core가 소유하며 이 플러그인은 정의하지 않는다.
 증거 분석·한국어 문서·법률 초안의 독립 도메인 플러그인이다. 포렌식 획득 또는 법원 제출 적격성을 보장하지 않는다.

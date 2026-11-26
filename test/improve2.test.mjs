@@ -42,8 +42,8 @@ for(const skill of skills) test('improve2 decoy checklist: '+skill,()=>{
  assert.ok(body,'artifact analysis entrypoint needs checklist');
  for(const term of ['가설','SHA-256','격리','실행 추적','포맷 파서','[미확인]','소스맵','opaque predicate','shadow state machine','WASM','SQLite','API 키','비활성 섹션','예산','nothing found']) assert.ok(body.includes(term),term);
 });
-test('improve2 workspace release is consistently 0.2.1',()=>{
- for(const file of ['package.json','plugin.json']) assert.equal(JSON.parse(read(file)).version,'0.2.1');
- for(const file of ['README.md','GEMINI.md','scripts/session_start.mjs']) assert.ok(read(file).includes('0.2.1'),file);
+test('improve2 workspace release is consistently 0.2.2',()=>{
+ for(const file of ['package.json','plugin.json']) assert.equal(JSON.parse(read(file)).version,'0.2.2');
+ for(const file of ['README.md','GEMINI.md','scripts/session_start.mjs']) assert.ok(read(file).includes('0.2.2'),file);
  assert.match(read('CHANGELOG.md'),/## 0\.2\.1/);
 });

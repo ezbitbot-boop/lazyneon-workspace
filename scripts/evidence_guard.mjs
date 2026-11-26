@@ -458,7 +458,7 @@ function isReadOnlyInspection(text) {
 	if (/[(){}]|::/.test(t)) return false;
 	for (const m of t.matchAll(OUTPUT_ARG_RE)) {
 		const out = m[1].replace(/^['"]|['"]$/g, '');
-		if (protectedIdentity(out) || isProtectedName(out) || EVIDENCE_SEGMENT_RE.test(out)) return false;
+		if (protectedIdentity(out) || isProtectedName(out) || evidenceSegment(out)) return false;
 	}
 	if (!t || t.includes('\n')) return false; // Multiline scripts cannot be classified safely.
     if (/^git\b/i.test(t) && !/^git\s+(?:status|log|show|diff|ls-files|ls-tree|rev-parse)\b(?!.*(?:--output|--ext-diff|--textconv|--no-index))/i.test(t)) return false;
@@ -477,7 +477,7 @@ function isReadOnlyInspection(text) {
 			// 출력 인자(-o/--output)가 증거 경로를 가리키면 차단
 			for (const m of seg.matchAll(OUTPUT_ARG_RE)) {
 				const out = m[1].replace(/^['"]|['"]$/g, '');
-				if (protectedIdentity(out) || isProtectedName(out) || EVIDENCE_SEGMENT_RE.test(out)) return false;
+				if (protectedIdentity(out) || isProtectedName(out) || evidenceSegment(out)) return false;
 			}
 			// 하위 식·스크립트 블록은 쓰기를 숨길 수 있다
 			if (/[(){}]|::/.test(seg)) return false;
@@ -526,7 +526,33 @@ function isProtectedName(token) {
 }
 // evidence 를 경로 세그먼트로 포함하는 토큰 (cp x evidence/ 같은 상대 경로 쓰기 포함).
 // evidence_note.md 나 커밋 메시지 속 일반 영단어 evidence(경로 구분자 없음)는 통과시킨다.
+// 폴더 이름 검사는 workspaceScoped() 를 거친 값에만 적용한다(evidenceSegment).
 const EVIDENCE_SEGMENT_RE = /^(?:.*[\/\\]evidence(?:[\/\\].*)?|evidence[\/\\].*)$/i;
+// 작업 폴더 안의 절대경로는 '<작업 폴더 이름>/<상대경로>' 로 바꿔 이름 검사를 한다.
+// 작업 폴더보다 위의 조상 폴더(/cases/Evidence/case1 의 Evidence)는 사건을 모아 두는 곳일 뿐이라
+// 그 이름 때문에 모든 쓰기가 막히면 안 된다. 작업 폴더 자체 이름이 evidence 이면 계속 차단하고,
+// 작업 폴더 밖 경로·작업 폴더를 모를 때는 절대경로 전체를 그대로 검사한다.
+function workspaceScoped(token) {
+	const raw = String(token);
+	if (!workspace || !path.isAbsolute(raw)) return raw;
+	const root = path.resolve(workspace).normalize('NFC');
+	const rel = path.relative(root, path.resolve(raw).normalize('NFC'));
+	if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) return raw;
+	return path.join(path.basename(root), rel);
+}
+const evidenceSegment = (token) => EVIDENCE_SEGMENT_RE.test(workspaceScoped(token));
+// 명령 원문 속 작업 폴더 절대경로를 '<작업 폴더 이름>' 으로 바꾼다(이름 검사 전용, 신원 검사에는 원문을 쓴다).
+function maskWorkspace(text) {
+	if (!workspace) return text;
+	const root = path.resolve(workspace);
+	const name = path.basename(root);
+	if (!name) return text;
+	const win = process.platform === 'win32';
+	const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	const sep = win ? '[\\\\/]+' : '/+';
+	const prefix = root.split(win ? /[\\/]+/ : /\/+/).map(escape).join(sep);
+	return String(text).replace(new RegExp(`(?<=^|[\\s"'=>(,;|&])${prefix}(?=[\\\\/"'\\s]|$)`, win ? 'gi' : 'g'), name);
+}
 const PROTECTED_PATTERNS = [
 	{ re: /(^|\/|\\)evidence(\/|\\|$)/i, label: 'evidence directory' },
 	{ re: /\$mft/i, label: '$MFT' },
@@ -560,9 +586,10 @@ function findViolation(rawTexts) {
 		// 명령(텍스트) 단위로 한다 — "sha256sum evidence/x.raw"의 경로 토큰만
 		// 떼어 보면 명령이 읽기인지 알 수 없다.
 		const readOnly = isReadOnlyInspection(text);
+		const scopedText = workspaceScoped(text);
 		for (const { re, label } of PROTECTED_PATTERNS) {
 			if (readOnly && label === 'evidence directory') continue;
-			if (re.test(text)) return `pattern ${label}`;
+			if (re.test(label === 'evidence directory' ? scopedText : text)) return `pattern ${label}`;
 		}
 		if (readOnly) continue;
 		const imports = /\b(?:import|from)\s/.test(text);
@@ -572,7 +599,13 @@ function findViolation(rawTexts) {
 			// 'import dissect.eventlog.evtx' 의 모듈명은 파일 경로가 아니다(점 2개 이상, 소문자 식별자, 경로 구분자 없음).
 			if (imports && /^[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*){2,}$/.test(token)) continue;
 			if (isProtectedName(token)) return `protected extension: ${path.basename(token)}`;
-			if (EVIDENCE_SEGMENT_RE.test(token)) return 'evidence directory';
+		}
+		// 이름 검사는 작업 폴더 기준 경로를 먼저 만든 뒤 토큰으로 나눈다. 원문을 먼저 나누면
+		// '/a b/Evidence/case1/r.md' 의 'Evidence/case1/r.md' 조각이 상대경로처럼 보인다.
+		const scopedQuoted = [...scopedText.matchAll(/"([^"]+)"|'([^']+)'/g)].map(m => m[1] ?? m[2]);
+		for (const token of [scopedText, ...scopedQuoted, ...pathTokens([scopedText])]) {
+			if (imports && /^[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*){2,}$/.test(token)) continue;
+			if (evidenceSegment(token)) return 'evidence directory';
 		}
 	}
 	return null;
@@ -674,8 +707,11 @@ async function main() {
         }
 		const coreTargets = new Set(targets.filter(isCoreOwned));
 		const texts = targets.filter(t=>!coreTargets.has(t));
-		const protectedToken=t=>protectedIdentity(t)||isProtectedName(t)||EVIDENCE_SEGMENT_RE.test(t);
-        const deniedCommand=commands.find(c=>/\b(?:powershell|pwsh)(?:\.exe)?\b[^|&;\n]*\s-(?:e|ec|en\w*)(?=\s|$)/i.test(c)) || commands.find(c=>evidenceTokens(c).some(protectedToken)&&!readOnlyEvidenceCommand(c,workspace||process.cwd(),protectedToken));
+		const protectedToken=t=>protectedIdentity(t)||isProtectedName(t)||evidenceSegment(t);
+		// 명령 토큰은 공백에서 잘리므로 '/a b/Evidence/case1/x' 가 'b/Evidence/case1/x' 조각이 된다.
+		// 폴더 이름 검사는 작업 폴더 접두부를 먼저 바꾼 명령의 토큰으로만 한다.
+		const mentionsEvidence=c=>evidenceTokens(c).some(t=>protectedIdentity(t)||isProtectedName(t))||evidenceTokens(maskWorkspace(c)).some(evidenceSegment);
+        const deniedCommand=commands.find(c=>/\b(?:powershell|pwsh)(?:\.exe)?\b[^|&;\n]*\s-(?:e|ec|en\w*)(?=\s|$)/i.test(c)) || commands.find(c=>mentionsEvidence(c)&&!readOnlyEvidenceCommand(c,workspace||process.cwd(),protectedToken));
         const base=workspace||process.cwd();
         const globCommand=commands.find(c=>globWriteTouchesEvidence(c,base,protectedToken));
         const inlineCommand=commands.find(inlineComputedWrite);

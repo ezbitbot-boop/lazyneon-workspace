@@ -174,3 +174,23 @@ def test_unlock_restores_matching_entries(tmp_path):
     r = _unlock({'platform': sys.platform, 'entries': [{'path': str(f), 'mode': 0o644, 'dev': s.st_dev, 'ino': s.st_ino, 'original_flags': 0, 'applied': ['chmod a-w'], 'status': 'protected'}], 'notes': []})
     assert r.returncode == 0, r.stderr
     assert stat.S_IMODE(f.lstat().st_mode) == 0o644
+
+
+@pytest.mark.parametrize('kind', ['file', 'dir'])
+def test_manifest_refuses_symlinks_in_evidence(tmp_path, kind):
+    ev = tmp_path/'evidence'; ev.mkdir(); (ev/'a.txt').write_text('a')
+    (tmp_path/'outside').mkdir(); (tmp_path/'outside'/'secret.txt').write_text('outside')
+    target = '../outside/secret.txt' if kind == 'file' else '../outside'
+    os.symlink(target, ev/'link')
+    r = subprocess.run([PY, str(ROOT/'scripts/evidence_manifest.py'), 'evidence', '-o', 'm.json'], cwd=tmp_path, capture_output=True, text=True)
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert 'link' in r.stderr and not (tmp_path/'m.json').exists()
+
+
+def test_manifest_generate_then_verify_round_trip(tmp_path):
+    ev = tmp_path/'evidence'; (ev/'sub').mkdir(parents=True); (ev/'a.txt').write_text('a'); (ev/'sub'/'b.txt').write_text('b')
+    gen = subprocess.run([PY, str(ROOT/'scripts/evidence_manifest.py'), 'evidence', '-o', 'm.json'], cwd=tmp_path, capture_output=True, text=True)
+    assert gen.returncode == 0, gen.stderr
+    assert sorted(f['path'] for f in json.loads((tmp_path/'m.json').read_text())['files']) == ['a.txt', os.path.join('sub', 'b.txt')]
+    ver = subprocess.run([PY, str(ROOT/'scripts/evidence_manifest.py'), 'evidence', '--verify', 'm.json'], cwd=tmp_path, capture_output=True, text=True)
+    assert ver.returncode == 0, ver.stdout + ver.stderr

@@ -32,7 +32,9 @@ from evidence_output import safe_output, atomic_write
 import argparse
 import hashlib
 import json
+import os
 import platform
+import stat
 import sys
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -47,18 +49,30 @@ TOOL_VERSION = "1.0.5"
 
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
-    with path.open("rb") as f:
+    # O_NOFOLLOW: a file swapped for a link after listing is refused, not followed.
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
+    with os.fdopen(fd, "rb") as f:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
 
 
+def _list_files(root: Path) -> list[Path]:
+    """lstat-based listing that never follows links (same policy as case_mode)."""
+    out = []
+    for d, dirs, names in os.walk(root, followlinks=False):
+        for name in [*dirs, *names]:
+            p = Path(d) / name
+            if p.is_symlink():
+                raise ValueError(f"Symbolic link in evidence refused: {p.relative_to(root)}")
+        out.extend(Path(d) / n for n in names if stat.S_ISREG((Path(d) / n).lstat().st_mode))
+    return sorted(out)
+
+
 def build_manifest(root: Path) -> dict:
     files = []
-    for f in sorted(root.rglob("*")):
-        if not f.is_file():
-            continue
-        st = f.stat()
+    for f in _list_files(root):
+        st = f.lstat()
         files.append({
             "path": str(f.relative_to(root)),
             "sha256": sha256_file(f),

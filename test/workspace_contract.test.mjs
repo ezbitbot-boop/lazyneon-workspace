@@ -61,7 +61,7 @@ test('case hashes detect content changes with isolated policy state',()=>tempora
  const run=(args)=>spawnSync(process.execPath,[path.join(root,'scripts/case_mode.mjs'),...args],{cwd:p,encoding:'utf8'});
  const init=run(['init',source,'--out',out]);assert.equal(init.status,0,init.stderr);
  assert.ok(fs.existsSync(path.join(out,'.lazyneon-workspace','case-settings.json')));
- assert.equal(run(['close','--case',out]).status,0);
+ const first=run(['close','--case',out]);assert.equal(first.status,0,first.stdout+first.stderr);
  const unlock=run(['unlock','--case',out,'--reason','simulate tampering']);assert.equal(unlock.status,0,unlock.stderr);
  fs.writeFileSync(source,'changed');const close=run(['close','--case',out]);assert.equal(close.status,1);assert.match(close.stderr,/INTEGRITY FAIL/);assert.match(close.stderr,/CHANGED/);
 }));

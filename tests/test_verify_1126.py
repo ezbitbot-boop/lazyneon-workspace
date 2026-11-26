@@ -156,13 +156,14 @@ def test_unlock_checks_identity_before_changing_anything(tmp_path, change):
     entries = []
     for f in (a, b):
         f.write_text('orig'); os.chmod(f, 0o644); s = f.lstat()
-        entries.append({'path': str(f), 'mode': 0o644, 'dev': s.st_dev, 'ino': s.st_ino, 'original_flags': 0, 'applied': ['chmod a-w'], 'status': 'protected'})
+        # Windows keeps only the read-only bit: 0o644 reads back as 0o666.
+        entries.append({'path': str(f), 'mode': stat.S_IMODE(s.st_mode), 'dev': s.st_dev, 'ino': s.st_ino, 'original_flags': 0, 'applied': ['chmod a-w'], 'status': 'protected'})
         os.chmod(f, 0o444)
     os.chmod(a, 0o644)  # Windows cannot delete or replace a read-only file.
     if change == 'replaced':
         # Create the replacement while the original still holds its inode; ext4 reuses a
         # freed inode number at once, which would make the replacement look identical.
-        new = tmp_path/'a.new'; new.write_text('replacement'); os.chmod(new, 0o600)
+        new = tmp_path/'a.new'; new.write_text('replacement'); os.chmod(new, 0o444)
         os.replace(new, a)
     else:
         a.unlink()
@@ -170,15 +171,16 @@ def test_unlock_checks_identity_before_changing_anything(tmp_path, change):
     assert r.returncode == 2, r.stdout + r.stderr
     assert '복구 불완전' in r.stderr
     if change == 'replaced':
-        assert stat.S_IMODE(a.lstat().st_mode) == 0o600
+        assert stat.S_IMODE(a.lstat().st_mode) == 0o444  # not given the recorded writable mode
     assert stat.S_IMODE(b.lstat().st_mode) == 0o444  # nothing changed when any entry fails
 
 
 def test_unlock_restores_matching_entries(tmp_path):
     f = tmp_path/'a.txt'; f.write_text('orig'); os.chmod(f, 0o644); s = f.lstat(); os.chmod(f, 0o444)
-    r = _unlock({'platform': sys.platform, 'entries': [{'path': str(f), 'mode': 0o644, 'dev': s.st_dev, 'ino': s.st_ino, 'original_flags': 0, 'applied': ['chmod a-w'], 'status': 'protected'}], 'notes': []})
+    mode = stat.S_IMODE(s.st_mode)  # 0o644, or 0o666 on Windows
+    r = _unlock({'platform': sys.platform, 'entries': [{'path': str(f), 'mode': mode, 'dev': s.st_dev, 'ino': s.st_ino, 'original_flags': 0, 'applied': ['chmod a-w'], 'status': 'protected'}], 'notes': []})
     assert r.returncode == 0, r.stderr
-    assert stat.S_IMODE(f.lstat().st_mode) == 0o644
+    assert stat.S_IMODE(f.lstat().st_mode) == mode
 
 
 @pytest.mark.parametrize('kind', ['file', 'dir'])

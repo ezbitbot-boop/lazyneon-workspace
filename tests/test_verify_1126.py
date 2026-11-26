@@ -92,3 +92,25 @@ def test_pii_vault_is_owner_only(tmp_path):
     if os.name != 'nt':
         assert stat.S_IMODE(vault.stat().st_mode) == 0o600
     assert json.loads(vault.read_text(encoding='utf-8'))['token_to_value']
+
+
+def _case_root(ev):
+    module = (ROOT/'scripts'/'case_mode.mjs').as_uri()
+    js = ("import {collectEvidenceFiles,hashEvidence,evidenceRootHash} from " + json.dumps(module)
+          + "; const p=process.argv[1]; console.log(evidenceRootHash(await hashEvidence(collectEvidenceFiles(p)),p,true));")
+    return subprocess.run(['node', '--input-type=module', '-e', js, str(ev)], capture_output=True, text=True, check=True).stdout.strip()
+
+
+def test_report_verify_rejects_evidence_added_after_intake(tmp_path):
+    sys.path.insert(0, str(ROOT/'scripts'))
+    import hashlib
+    from report_core import verified_evidence_text
+    ev = tmp_path/'evidence'; ev.mkdir(); (ev/'a.txt').write_text('A')
+    base = _case_root(ev)
+    (tmp_path/'custody').mkdir(); m = tmp_path/'custody'/'hashes-start.json'
+    m.write_text(json.dumps({'tool': 'case_mode.mjs init', 'evidencePath': str(ev), 'rootHash': base,
+                             'files': [{'path': str(ev/'a.txt'), 'sha256': hashlib.sha256(b'A').hexdigest(), 'sizeBytes': 1}]}))
+    assert json.loads(verified_evidence_text(m))[-1] == {'rootHash': base}
+    (ev/'planted.txt').write_text('added after intake')
+    with pytest.raises(ValueError, match='baseline rootHash'):
+        verified_evidence_text(m)

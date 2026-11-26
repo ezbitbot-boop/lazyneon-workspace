@@ -28,7 +28,7 @@ except ModuleNotFoundError:
     from workspace_provenance import workspace_provenance, provenance_text
 
 from evidence_protection import protect, verify, unlock
-from evidence_output import safe_output
+from evidence_output import safe_output, atomic_write
 import argparse
 import hashlib
 import json
@@ -143,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
     out = json.dumps(manifest, ensure_ascii=False, indent=2)
     if args.output:
         try:
-            Path(args.output).write_text(out, encoding="utf-8")
+            atomic_write(args.output, out.encode("utf-8"))
         except OSError:
             if manifest.get("protection"): unlock(manifest["protection"])
             raise

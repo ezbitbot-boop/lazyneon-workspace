@@ -36,3 +36,22 @@ def test_guard_still_allows_unrelated_globs_and_reads(ctx, command):
     (ctx/'evidence').mkdir(); (ctx/'evidence'/'chat.txt').write_text('x'); (ctx/'evidence'/'a.mp4').write_text('x')
     r = guard(ctx, command)
     assert r.returncode == 0, (command, r.stdout, r.stderr)
+
+
+PY = sys.executable
+
+
+def test_manifest_refuses_output_hard_linked_to_evidence(tmp_path):
+    ev = tmp_path/'evidence'; ev.mkdir(); (ev/'a.txt').write_text('ORIGINAL')
+    os.link(ev/'a.txt', tmp_path/'out.json')
+    r = subprocess.run([PY, str(ROOT/'scripts/evidence_manifest.py'), 'evidence', '-o', 'out.json'], cwd=tmp_path, capture_output=True, text=True)
+    assert r.returncode != 0, r.stdout
+    assert (ev/'a.txt').read_text() == 'ORIGINAL'
+
+
+def test_atomic_write_does_not_write_through_hard_link(tmp_path):
+    sys.path.insert(0, str(ROOT/'scripts'))
+    from evidence_output import atomic_write
+    (tmp_path/'keep').write_text('KEEP'); os.link(tmp_path/'keep', tmp_path/'link')
+    atomic_write(tmp_path/'link', b'new')
+    assert (tmp_path/'keep').read_text() == 'KEEP' and (tmp_path/'link').read_text() == 'new'

@@ -27,6 +27,15 @@ def checked(*args):
         raise PermissionError(f"{' '.join(args)}: {result.stderr or result.stdout}")
     return result.stdout
 
+# NTFS file IDs exceed 2**53; the record passes through Node (case_mode.mjs), whose JSON
+# numbers would round them and every later identity check would fail. Store decimal strings.
+def identity(s):
+    return str(s.st_dev), str(s.st_ino)
+
+
+def same_identity(s, e):
+    return identity(s) == (str(e.get('dev')), str(e.get('ino')))
+
 
 def read_only_media(p):
     if os.name != 'nt':
@@ -64,8 +73,9 @@ def protect(paths, journal=None):
                 raise ValueError(f'Unsupported evidence entry: {p}')
             if p.is_file() and s.st_nlink > 1:
                 raise ValueError(f'Hard-linked evidence unsupported: {p}')
-            entries.append({'path': str(p), 'mode': stat.S_IMODE(s.st_mode), 'dev': s.st_dev,
-                            'ino': s.st_ino, 'original_flags': getattr(s, 'st_flags', 0), 'applied': []})
+            dev, ino = identity(s)
+            entries.append({'path': str(p), 'mode': stat.S_IMODE(s.st_mode), 'dev': dev,
+                            'ino': ino, 'original_flags': getattr(s, 'st_flags', 0), 'applied': []})
     # An existing matching lock record owns the pre-lock mode/flags. Inherit
     # that recovery state rather than treating already locked modes as original.
     from evidence_output import registries
@@ -74,7 +84,7 @@ def protect(paths, journal=None):
         previous = doc.get('protection') or {}
         if previous.get('platform') == sys.platform:
             for old in previous.get('entries', []):
-                originals[(old.get('path'), old.get('dev'), old.get('ino'))] = old
+                originals[(old.get('path'), str(old.get('dev')), str(old.get('ino')))] = old
     for e in entries:
         old = originals.get((e['path'], e['dev'], e['ino']))
         if old:
@@ -159,7 +169,7 @@ def lock(record, journal=None):
     # Do not replace the baseline identities or original modes when relocking.
     for e in record['entries']:
         s = Path(e['path']).lstat()
-        if stat.S_ISLNK(s.st_mode) or (s.st_dev, s.st_ino) != (e['dev'], e['ino']):
+        if stat.S_ISLNK(s.st_mode) or not same_identity(s, e):
             raise ValueError('PROTECTION identity changed: ' + e['path'])
     fresh = protect([e['path'] for e in record['entries']], journal=journal)
     missing = verify(record)
@@ -207,7 +217,7 @@ def unlock(record, strict=True):
         except FileNotFoundError:
             problems.append(f'missing: {p}')
             continue
-        if stat.S_ISLNK(s.st_mode) or ('dev' in e and 'ino' in e and (s.st_dev, s.st_ino) != (e['dev'], e['ino'])):
+        if stat.S_ISLNK(s.st_mode) or ('dev' in e and 'ino' in e and not same_identity(s, e)):
             problems.append(f'identity changed: {p}')
             continue
         targets.append(e)
@@ -234,7 +244,7 @@ def verify(record):
         p = Path(e['path'])
         try:
             s = p.lstat()
-            if p.is_symlink() or (s.st_dev, s.st_ino) != (e['dev'], e['ino']):
+            if p.is_symlink() or not same_identity(s, e):
                 problems.append(f'PROTECTION identity changed: {p}')
             if e.get('status') == 'protected-by-media' and not read_only_media(p):
                 problems.append(f'PROTECTION read-only media missing: {p}')

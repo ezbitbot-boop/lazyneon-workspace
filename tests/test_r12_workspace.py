@@ -179,6 +179,7 @@ def test_r12_legacy_case_close_and_unlock(ctx):
     import hashlib
     evidence=ctx/'data';evidence.mkdir();f=evidence/'a';f.write_text('a');work=ctx/'work';(work/'custody').mkdir(parents=True)
     (work/'custody/hashes-start.json').write_text(json.dumps({'evidencePath':str(evidence),'files':[{'path':str(f),'sha256':hashlib.sha256(b'a').hexdigest()}]}))
+    (work/'custody/log.jsonl').write_text(json.dumps({'type':'init','evidencePath':str(evidence)})+'\n')  # close requires the intake record
     r=case(ctx,'close','--case',work);assert r.returncode==0 and '구버전' in r.stderr
     r=case(ctx,'unlock','--case',work,'--reason','done');assert r.returncode!=0 and 'No OS protection record' in r.stderr and 'Traceback' not in r.stderr
 

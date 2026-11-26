@@ -67,6 +67,7 @@ def test_case_reads_each_evidence_once(tmp_path, command):
     custody=tmp_path/'case/custody'; custody.mkdir(parents=True)
     import hashlib
     (custody/'hashes-start.json').write_text(json.dumps({'evidencePath':str(evidence),'files':[{'path':str(sample),'sha256':hashlib.sha256(b'original').hexdigest()}]}))
+    (custody/'log.jsonl').write_text(json.dumps({'type':'init','evidencePath':str(evidence)})+'\n')  # close requires the intake record
     probe=tmp_path/'probe.mjs'
     probe.write_text("import fs from 'node:fs'; const original=fs.createReadStream; fs.createReadStream=function(p,...a){console.error('EVIDENCE_READ');return original.call(this,p,...a)};")
     result=subprocess.run(['node','--import',str(probe),str(ROOT/'scripts/case_mode.mjs'),command,'--case',str(custody.parent)],text=True,capture_output=True)

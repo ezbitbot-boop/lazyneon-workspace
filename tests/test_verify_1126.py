@@ -107,10 +107,39 @@ def test_report_verify_rejects_evidence_added_after_intake(tmp_path):
     from report_core import verified_evidence_text
     ev = tmp_path/'evidence'; ev.mkdir(); (ev/'a.txt').write_text('A')
     base = _case_root(ev)
-    (tmp_path/'custody').mkdir(); m = tmp_path/'custody'/'hashes-start.json'
+    # Nested: a custody/ directly under tmp_path is visible to sibling tests' registries().
+    (tmp_path/'w'/'custody').mkdir(parents=True); m = tmp_path/'w'/'custody'/'hashes-start.json'
     m.write_text(json.dumps({'tool': 'case_mode.mjs init', 'evidencePath': str(ev), 'rootHash': base,
                              'files': [{'path': str(ev/'a.txt'), 'sha256': hashlib.sha256(b'A').hexdigest(), 'sizeBytes': 1}]}))
     assert json.loads(verified_evidence_text(m))[-1] == {'rootHash': base}
     (ev/'planted.txt').write_text('added after intake')
     with pytest.raises(ValueError, match='baseline rootHash'):
         verified_evidence_text(m)
+
+
+def _legacy_case(tmp_path, log_lines):
+    import hashlib
+    ev = tmp_path/'evidence'; ev.mkdir(); (ev/'a.txt').write_text('A')
+    work = tmp_path/'case'; (work/'custody').mkdir(parents=True)
+    (work/'custody'/'hashes-start.json').write_text(json.dumps({'tool': 'case_mode.mjs init', 'evidencePath': str(ev), 'timestamp': 'x',
+        'files': [{'path': str(ev/'a.txt'), 'type': 'file', 'sha256': hashlib.sha256(b'A').hexdigest(), 'sizeBytes': 1}]}))
+    if log_lines is not None:
+        (work/'custody'/'log.jsonl').write_text(''.join(json.dumps(l)+'\n' for l in log_lines))
+    return ev, work
+
+
+@pytest.mark.parametrize('log', [None, [], [{'type': 'close', 'status': 'ok'}], [{'type': 'init', 'evidencePath': '/elsewhere'}]])
+def test_case_close_requires_intake_record(tmp_path, log):
+    ev, work = _legacy_case(tmp_path, log)
+    r = subprocess.run(['node', str(ROOT/'scripts/case_mode.mjs'), 'close', '--case', str(work)], capture_output=True, text=True)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert 'CUSTODY INCOMPLETE' in r.stderr
+    last = json.loads((work/'custody'/'log.jsonl').read_text().splitlines()[-1])
+    assert last['type'] == 'close' and last['status'] == 'INTEGRITY_FAIL' and last['custodyProblems']
+
+
+def test_case_close_ok_with_matching_intake_record(tmp_path):
+    ev, work = _legacy_case(tmp_path, [])
+    (work/'custody'/'log.jsonl').write_text(json.dumps({'type': 'init', 'evidencePath': str(ev)})+'\n')
+    r = subprocess.run(['node', str(ROOT/'scripts/case_mode.mjs'), 'close', '--case', str(work)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr

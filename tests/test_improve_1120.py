@@ -70,7 +70,7 @@ def test_case_reads_each_evidence_once(tmp_path, command):
     (custody/'log.jsonl').write_text(json.dumps({'type':'init','evidencePath':str(evidence)})+'\n')  # close requires the intake record
     probe=tmp_path/'probe.mjs'
     probe.write_text("import fs from 'node:fs'; const original=fs.createReadStream; fs.createReadStream=function(p,...a){console.error('EVIDENCE_READ');return original.call(this,p,...a)};")
-    result=subprocess.run(['node','--import',str(probe),str(ROOT/'scripts/case_mode.mjs'),command,'--case',str(custody.parent)],text=True,capture_output=True)
+    result=subprocess.run(['node','--import',probe.as_uri(),str(ROOT/'scripts/case_mode.mjs'),command,'--case',str(custody.parent)],text=True,capture_output=True)
     assert result.returncode==0,result.stderr
     assert result.stderr.count('EVIDENCE_READ')==1
 

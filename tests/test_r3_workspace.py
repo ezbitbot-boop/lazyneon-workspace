@@ -197,13 +197,17 @@ def test_bootstrap_current_name():
     assert 'https://github.com/ezbitbot-boop/lazyneon-workspace.git' in text
 
 def test_session_timeout_and_context_limits(tmp_path):
-    p = subprocess.Popen(['node', str(ROOT/'scripts/session_start.mjs')], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    try:
-        p.wait(timeout=2.5)
-        assert json.loads(p.stdout.read())['injectSteps']
-    finally:
-        if p.poll() is None: p.kill(); p.wait()
-        p.stdin.close()
+    # stdout goes to a file: an unread pipe holds about 4 KB on Windows, and the
+    # rules text is larger, so the child would block before exiting.
+    out_file = tmp_path/'session.json'
+    with open(out_file, 'w') as sink:
+        p = subprocess.Popen(['node', str(ROOT/'scripts/session_start.mjs')], stdin=subprocess.PIPE, stdout=sink, stderr=subprocess.DEVNULL, text=True)
+        try:
+            p.wait(timeout=2.5)
+        finally:
+            if p.poll() is None: p.kill(); p.wait()
+            p.stdin.close()
+    assert json.loads(out_file.read_text(encoding='utf-8'))['injectSteps']
     (tmp_path/'.lazyneon').mkdir()
     (tmp_path/'.lazyneon/pins.md').write_text('\n'.join(f'PIN-{i}' for i in range(500)))
     out = hook('session_start', {'workspacePaths': [str(tmp_path)]}, ROOT).stdout
@@ -239,6 +243,7 @@ runpy.run_path('test/test_forensic_scripts.py', run_name='collection_probe')
     result = subprocess.run([sys.executable, '-c', code], cwd=ROOT, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
 
+@pytest.mark.skipif(os.name == 'nt', reason="runs a '#!' recording script as LAZYNEON_WS_PYTHON; Windows cannot execute shebang files")
 @pytest.mark.parametrize('guard', ['hallucination_guard', 'legal_factuality_guard'])
 @pytest.mark.parametrize('verifier_result', ['success', 'empty', 'failed', 'nonzero'])
 def test_guard_explicit_python_receives_workspace_evidence(tmp_path, guard, verifier_result):
@@ -288,7 +293,7 @@ def test_audit_isolated_between_cases_and_missing_workspace(tmp_path):
         result = hook('evidence_guard', {'workspacePaths': [str(case)], 'toolCall': {'args': {'TargetFile': str(source)}}}, ROOT)
         assert result.returncode == 0
         rows = [json.loads(s) for s in (case/'.lazyneon-workspace/audit_trail.jsonl').read_text().splitlines()]
-        assert len(rows) == 1 and str(source) in json.dumps(rows)
+        assert len(rows) == 1 and rows[0]['file'] == str(source)
     case = tmp_path/'unknown'; case.mkdir(); source = case/'source.txt'; source.write_text('x')
     result = hook('evidence_guard', {'toolCall': {'args': {'TargetFile': str(source)}}}, case)
     assert 'workspace missing' in result.stderr

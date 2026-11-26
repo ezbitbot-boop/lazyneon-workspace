@@ -84,6 +84,7 @@ def slow(ctx):
     p.chmod(0o755)
     return {'LAZYNEON_WS_PYTHON':str(p),'LAZYNEON_WS_VERIFY_TIMEOUT_MS':'100'}
 
+@pytest.mark.skipif(os.name == 'nt', reason="runs a '#!' script as LAZYNEON_WS_PYTHON; Windows cannot execute shebang files")
 def test_legal_timeout_failure_delivered(ctx):
     (ctx/'소장.md').write_text('민법 제1500조')
     p=event(ctx,{'path':'소장.md'})
@@ -101,6 +102,7 @@ def test_budget_records_unchecked(ctx):
     assert time.monotonic()-start<3
     assert len(rows(ctx))==3 and all('미확인' in r['message'] for r in rows(ctx))
 
+@pytest.mark.skipif(os.name == 'nt', reason="runs a '#!' script as LAZYNEON_WS_PYTHON; Windows cannot execute shebang files")
 def test_completed_verdict_survives_kill(ctx):
     (ctx/'소장.md').write_text('민법 제1500조')
     (ctx/'slow_소장.md').write_text('민법 제1500조')
@@ -161,10 +163,13 @@ def test_workspace_missing_feedback(ctx,with_workspace):
 
 @pytest.mark.parametrize('script,args',[('session_start.mjs',[]),('domain_feedback.mjs',['inject'])])
 def test_stdin_complete_exits_early(ctx,script,args):
-    proc=subprocess.Popen(['node',str(ROOT/'scripts'/script),*args],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    # Output is discarded rather than piped: an unread pipe holds about 4 KB on Windows
+    # and session_start writes more, so the child would block before exiting.
+    proc=subprocess.Popen(['node',str(ROOT/'scripts'/script),*args],stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,text=True)
     try:
         proc.stdin.write('{}'); proc.stdin.flush()
-        proc.wait(timeout=.2)
+        # Well under the 1.5 s stdin deadline, so only the early exit can pass.
+        proc.wait(timeout=1)
         assert proc.returncode==0
     finally:
         if proc.poll() is None: proc.kill(); proc.wait()
@@ -229,6 +234,7 @@ def test_patch_relay_matches_write_failures(ctx):
     assert any(r['kind']=='fail' for r in after)
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='chmod(0) cannot make a file unreadable on Windows')
 def test_slop_crash_is_not_pass(ctx):
     # A directory is now NOT_APPLICABLE; use an actual unreadable report to
     # retain the verifier failure / unchecked contract.

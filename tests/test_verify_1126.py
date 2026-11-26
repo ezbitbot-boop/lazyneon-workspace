@@ -158,9 +158,14 @@ def test_unlock_checks_identity_before_changing_anything(tmp_path, change):
         f.write_text('orig'); os.chmod(f, 0o644); s = f.lstat()
         entries.append({'path': str(f), 'mode': 0o644, 'dev': s.st_dev, 'ino': s.st_ino, 'original_flags': 0, 'applied': ['chmod a-w'], 'status': 'protected'})
         os.chmod(f, 0o444)
-    a.unlink()
+    os.chmod(a, 0o644)  # Windows cannot delete or replace a read-only file.
     if change == 'replaced':
-        a.write_text('replacement'); os.chmod(a, 0o600)
+        # Create the replacement while the original still holds its inode; ext4 reuses a
+        # freed inode number at once, which would make the replacement look identical.
+        new = tmp_path/'a.new'; new.write_text('replacement'); os.chmod(new, 0o600)
+        os.replace(new, a)
+    else:
+        a.unlink()
     r = _unlock({'platform': sys.platform, 'entries': entries, 'notes': []})
     assert r.returncode == 2, r.stdout + r.stderr
     assert '복구 불완전' in r.stderr

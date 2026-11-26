@@ -95,7 +95,9 @@ def test_r11_os_protection_and_unlock(ctx):
         commands.append(f"tar xf '{archive}' -C '{evidence}'")
         for command in commands:
             r=subprocess.run(command,shell=True,capture_output=True,text=True)
-            assert r.returncode!=0 or (command.startswith(('perl -pi','find ')) and 'Operation not permitted' in r.stderr),command
+            # perl -pi and find report the refusal on stderr but may still exit 0:
+            # 'Operation not permitted' (macOS uchg, chattr +i) or 'Permission denied' (Linux chmod a-w).
+            assert r.returncode!=0 or (command.startswith(('perl -pi','find ')) and ('Operation not permitted' in r.stderr or 'Permission denied' in r.stderr)),command
             assert hashlib.sha256(f.read_bytes()).hexdigest()==digest
         assert case(ctx,'verify','--case',work).returncode==0
         assert case(ctx,'unlock','--case',work).returncode!=0

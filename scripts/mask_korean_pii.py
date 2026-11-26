@@ -411,8 +411,10 @@ class PiiVault:
             "salt": self.salt,
             "token_to_value": self._token_to_value,
         }
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
+        # 원본 PII를 담으므로 소유자 전용(0600) 임시 파일에 쓴 뒤 원자적으로 게시한다.
+        # Windows에서는 POSIX 모드가 ACL을 바꾸지 않으므로 사용자 프로필 아래에 둘 것.
+        from evidence_output import atomic_write
+        atomic_write(path, json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"), mode=0o600)
 
     @classmethod
     def load(cls, path: str) -> "PiiVault":

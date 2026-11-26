@@ -78,3 +78,17 @@ def test_mask_pii_distinct_paths_still_work(tmp_path):
     r = subprocess.run([PY, str(ROOT/'scripts/mask_korean_pii.py'), str(src), '--output', str(tmp_path/'out.txt'), '--report', str(tmp_path/'r.md')], cwd=tmp_path, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert '1234-5678' not in (tmp_path/'out.txt').read_text(encoding='utf-8')
+
+
+def test_pii_vault_is_owner_only(tmp_path):
+    src = tmp_path/'src.txt'; src.write_text('연락처 010-1234-5678\n', encoding='utf-8')
+    vault = tmp_path/'v.pii-vault.json'
+    old = os.umask(0o022)
+    try:
+        r = subprocess.run([PY, str(ROOT/'scripts/mask_korean_pii.py'), str(src), '--output', str(tmp_path/'out.txt'), '--vault', str(vault)], cwd=tmp_path, capture_output=True, text=True)
+    finally:
+        os.umask(old)
+    assert r.returncode == 0, r.stderr
+    if os.name != 'nt':
+        assert stat.S_IMODE(vault.stat().st_mode) == 0o600
+    assert json.loads(vault.read_text(encoding='utf-8'))['token_to_value']

@@ -870,4 +870,14 @@ async function main() {
 	process.exit(0);
 }
 
-main();
+// 검사 중 예외(깊은 중첩 입력의 스택 초과 등)는 통과가 아니라 차단이다(fail-closed).
+main().catch((error) => {
+	if (hookType === 'pre-tool-use') {
+		const reason = `[FORENSIC INTEGRITY GUARD] Write operation BLOCKED — guard could not finish its check (${error?.name || 'Error'})`;
+		console.error(reason);
+		process.stdout.write(JSON.stringify({ decision: 'deny', reason }) + '\n');
+	} else {
+		process.stdout.write(JSON.stringify({ status: 'NOT_CHECKED', reason: String(error?.name || 'Error') }) + '\n');
+	}
+	process.exit(1);
+});

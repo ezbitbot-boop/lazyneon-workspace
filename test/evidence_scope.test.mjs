@@ -79,3 +79,13 @@ test('writes into an Evidence ancestor outside the case stay denied', () => with
  assert.equal(write(ws, path.join(path.dirname(ws), 'sibling.md')), 'deny');
 }));
 
+test('an internal guard error denies instead of allowing', () => withCase(['cases'], ws => {
+ // Deeply nested arguments overflow the recursive target walk.
+ let args = '"report.md"';
+ for (let i = 0; i < 20000; i++) args = `{"args":${args}}`;
+ const r = spawnSync(process.execPath, [guard, 'pre-tool-use'], {
+  input: `{"workspacePaths":${JSON.stringify([ws])},"toolCall":{"name":"write_file","args":${args}}}`, encoding: 'utf8', timeout: 30000,
+ });
+ assert.equal(r.status, 1, r.stderr);
+ assert.equal(JSON.parse(r.stdout.trim().split('\n').at(-1)).decision, 'deny');
+}));

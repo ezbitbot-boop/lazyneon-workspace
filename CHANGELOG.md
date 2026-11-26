@@ -7,6 +7,7 @@
 - domain_feedback: 전달한 판정 큐는 바로 삭제하고, 전달되지 않은 큐는 24시간 뒤 삭제.
 - README: Windows PowerShell 업데이트 명령 추가.
 - 네 도메인 가드의 stdin 읽기 함수를 `hook_workspace.mjs` 하나로 통합(동작 변화 없음).
+- case-mode Windows 증거 보호: `icacls /deny (W,D,DC)`는 SYNCHRONIZE까지 막아 증거 읽기·목록이 실패하고 close/verify가 깨졌음. 특정 권한 `(WD,AD,WEA,WA,DE,DC)` deny와 읽기 전용 속성으로 바꿔 쓰기·생성·삭제·이름 변경·밖으로 이동·읽기 전용 해제(`del /f`, `Remove-Item -Force` 포함)는 막고 읽기·목록은 허용. verify는 정확히 이 deny 집합과 읽기 전용 속성이 모두 있어야 통과.
 - GitHub Actions: Node 20–25 × 3 OS 계약 테스트, Python 3.12 × 3 OS pytest.
 
 ## 0.2.2 — 2026-11-26

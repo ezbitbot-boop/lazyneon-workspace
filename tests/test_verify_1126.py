@@ -143,3 +143,34 @@ def test_case_close_ok_with_matching_intake_record(tmp_path):
     (work/'custody'/'log.jsonl').write_text(json.dumps({'type': 'init', 'evidencePath': str(ev)})+'\n')
     r = subprocess.run(['node', str(ROOT/'scripts/case_mode.mjs'), 'close', '--case', str(work)], capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def _unlock(record):
+    return subprocess.run([PY, str(ROOT/'scripts'/'evidence_protection.py')], input=json.dumps({'action': 'unlock', 'record': record}),
+                          capture_output=True, text=True, cwd=str(ROOT/'scripts'))
+
+
+@pytest.mark.parametrize('change', ['replaced', 'missing'])
+def test_unlock_checks_identity_before_changing_anything(tmp_path, change):
+    a, b = tmp_path/'a.txt', tmp_path/'b.txt'
+    entries = []
+    for f in (a, b):
+        f.write_text('orig'); os.chmod(f, 0o644); s = f.lstat()
+        entries.append({'path': str(f), 'mode': 0o644, 'dev': s.st_dev, 'ino': s.st_ino, 'original_flags': 0, 'applied': ['chmod a-w'], 'status': 'protected'})
+        os.chmod(f, 0o444)
+    a.unlink()
+    if change == 'replaced':
+        a.write_text('replacement'); os.chmod(a, 0o600)
+    r = _unlock({'platform': sys.platform, 'entries': entries, 'notes': []})
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert '복구 불완전' in r.stderr
+    if change == 'replaced':
+        assert stat.S_IMODE(a.lstat().st_mode) == 0o600
+    assert stat.S_IMODE(b.lstat().st_mode) == 0o444  # nothing changed when any entry fails
+
+
+def test_unlock_restores_matching_entries(tmp_path):
+    f = tmp_path/'a.txt'; f.write_text('orig'); os.chmod(f, 0o644); s = f.lstat(); os.chmod(f, 0o444)
+    r = _unlock({'platform': sys.platform, 'entries': [{'path': str(f), 'mode': 0o644, 'dev': s.st_dev, 'ino': s.st_ino, 'original_flags': 0, 'applied': ['chmod a-w'], 'status': 'protected'}], 'notes': []})
+    assert r.returncode == 0, r.stderr
+    assert stat.S_IMODE(f.lstat().st_mode) == 0o644

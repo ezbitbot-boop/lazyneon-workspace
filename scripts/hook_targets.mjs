@@ -167,6 +167,19 @@ export function shellTokens(command) {
   return (command.match(/(?:"(?:\\.|[^"\\])*"|'[^']*'|[^\s"'|;&<>])+|>>?|[|;&\n]/g)||[])
     .map(t=>t.replace(/"((?:\\.|[^"\\])*)"|'([^']*)'/g,(_,a,b)=>a??b));
 }
+// ffmpeg writes every positional that is not an option value or an -i input,
+// not only the last one (`ffmpeg -i in -y evidence/a.mp4 out.wav` writes both).
+const FFMPEG_BOOLEAN=/^-(?:y|n|vn|an|sn|dn|hide_banner|nostdin|stats|nostats|re|shortest|copyts|benchmark|xerror|ignore_unknown)$/;
+export function ffmpegOutputs(args) {
+  const out=[];
+  for(let i=0;i<args.length;i++) {
+    const t=args[i];
+    if(t==='-i') {i++;continue;}
+    if(t.startsWith('-')&&t!=='-') {if(!FFMPEG_BOOLEAN.test(t))i++;continue;}
+    out.push(t);
+  }
+  return out;
+}
 export function shellWriteTargets(command, workspace=process.cwd()) {
   const out=[];
   command=command.replace(/(<<-?\s*['"]?(\w+)['"]?[^\n]*)\n[\s\S]*?\n\2[ \t]*(?=\n|$)/g,(all,header)=>/^(?:python[\d.]*|py|node|ruby|perl)\s/m.test(command)?all:header);
@@ -236,7 +249,7 @@ export function shellWriteTargets(command, workspace=process.cwd()) {
       const paths=(sep>=0?a.slice(sep+1):a.slice(sub+1)).filter(t=>!t.startsWith('-'));
       out.push(...(wt?[wt.slice(12)]:paths.length?paths:['.']));
     }
-    if(verb==='ffmpeg'&&pos.length) out.push(pos.at(-1));
+    if(verb==='ffmpeg') out.push(...ffmpegOutputs(a));
     const piiInput=['lazyforensic','lazyothers'].includes(verb)&&a.includes('pii')?a[a.indexOf('pii')+1]:/^(?:python[\d.]*|py)$/.test(verb)&&path.basename(pos[0]||'')==='pii_mask.py'?pos[1]:null;
     if(piiInput && a.includes('--mask') && (a.includes('--in-place') || !a.some(t=>['-o','--output'].includes(t)||t.startsWith('--output=')))) {
       let directory=false;try {directory=fs.statSync(path.resolve(workspace,piiInput)).isDirectory();}catch{}

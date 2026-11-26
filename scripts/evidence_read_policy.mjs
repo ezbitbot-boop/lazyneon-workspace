@@ -91,7 +91,8 @@ export function readOnlyEvidenceCommand(command,workspace,isProtected) {
     if(program==='certutil')return args.length>=2&&args[0].toLowerCase()==='-hashfile'&&flags.length===1;
     if(['icacls','attrib'].includes(program))return args.length===1&&!/^[-+]|^\/(?:grant|deny|reset|remove|inheritance|setowner|restore|save|[sdl])(?:$|:)/i.test(args[0]);
     if(program==='tesseract')return args[1]==='stdout'&&flags.every(f=>['-l','--psm','--oem','--dpi'].includes(f))&&args.every((a,i)=>i<2||a.startsWith('-')||args[i-1]?.startsWith('-'));
-    if(program==='ffmpeg')return args.includes('-i')&&!isProtected(args.at(-1))&&flags.every(f=>/^-(?:i|t|ss|to|vn|an|ar|ac|c(?::[av])?|codec(?::[av])?|f|y|n|hide_banner|loglevel)$/.test(f));
+    // Fail closed: any positional that is not an -i input may be an output.
+    if(program==='ffmpeg')return args.includes('-i')&&!args.some((a,i)=>!a.startsWith('-')&&args[i-1]!=='-i'&&isProtected(a))&&flags.every(f=>/^-(?:i|t|ss|to|vn|an|ar|ac|c(?::[av])?|codec(?::[av])?|f|y|n|hide_banner|loglevel)$/.test(f));
     if(program==='git')return /^(status|log|diff|show|ls-files|ls-tree|rev-parse)$/.test(args[0]||'') && flags.every(f=>/^-(?:[pUsw]|-(?:short|porcelain|stat|numstat|name-only|name-status|oneline|no-patch|no-ext-diff|no-textconv|cached|staged|all|pretty(?:=.*)?|format=.*))$/.test(f));
     if(program==='xxd') {
       const operands=[];for(let i=0;i<args.length;i++){if(/^-[cegls]$/.test(args[i])){i++;continue;}if(!args[i].startsWith('-'))operands.push(args[i]);}
@@ -133,4 +134,36 @@ function splitReadSegments(command) {
   }
   if(quote)return [''];
   segments.push(current);return segments;
+}
+
+// Glob write targets are expanded against the current tree; a match on
+// protected evidence, or a pattern that cannot be expanded, fails closed.
+const GLOB=/[*?[]/;
+function globSegment(seg) {
+  return new RegExp('^'+seg.replace(/[.+^${}()|\\]/g,'\\$&').replace(/\[!/g,'[^').replace(/\*/g,'.*').replace(/\?/g,'.')+'$','i');
+}
+export function globWriteTouchesEvidence(command,workspace,isProtected) {
+  for(const target of shellWriteTargets(command,workspace).filter(t=>GLOB.test(t))) {
+    const abs=path.resolve(workspace,target.replaceAll('\\','/'));
+    const root=path.parse(abs).root;
+    let matches=[root];
+    for(const seg of abs.slice(root.length).split('/').filter(Boolean)) {
+      if(!GLOB.test(seg)) {matches=matches.map(m=>path.join(m,seg));continue;}
+      let re;try{re=globSegment(seg);}catch{return true;}
+      matches=matches.flatMap(m=>{try{return fs.readdirSync(m).filter(n=>re.test(n)).map(n=>path.join(m,n));}catch{return [];}});
+    }
+    if(matches.some(isProtected)) return true;
+  }
+  return false;
+}
+// Inline interpreter code that mutates a computed path (e.g. 'evid'+'ence/x')
+// cannot be resolved statically; deny it when the workspace holds evidence.
+const INLINE=/(?:^|[\s;&|(])(?:python[\d.]*|py|node|bun|deno|ruby|perl|php)(?:\.exe)?\s+(?:[^\s]+\s+)*?(?:-[ceEp]|--eval|--print|eval)\s/i;
+const MUTATOR=/\b(?:unlink|unlinkSync|rm|rmSync|rmdir|rmdirSync|rmtree|remove|removedirs|writeFile|writeFileSync|appendFile|appendFileSync|truncate|truncateSync|ftruncate|rename|renameSync|replace|copyFile|copyFileSync|cpSync|move|copy|copy2|copyfile|chmod|chmodSync|utime|utimes|utimesSync|write_text|write_bytes|WriteAllText|WriteAllBytes|Delete|createWriteStream)\s*\(\s*(?!['"][^'"]*['"]\s*[,)])/;
+const OPEN_WRITE=/\bopen\s*\(\s*(?!['"][^'"]*['"]\s*[,)])[^)]*['"][^'"]*[wax+][^'"]*['"]/;
+export function inlineComputedWrite(command) {
+  return INLINE.test(command)&&(MUTATOR.test(command)||OPEN_WRITE.test(command));
+}
+export function workspaceHoldsEvidence(workspace,isProtected) {
+  try {return fs.readdirSync(workspace).some(n=>/^evidence$/i.test(n)||isProtected(path.join(workspace,n)));}catch{return false;}
 }

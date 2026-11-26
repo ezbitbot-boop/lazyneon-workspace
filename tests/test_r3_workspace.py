@@ -102,14 +102,18 @@ def test_workspace_payload_pins_and_case_audit(tmp_path):
     assert '근거 없는 해시' in result.stderr
     assert json.loads(result.stdout)['decision'] == 'block'
     relay_env = {**os.environ, 'HOME': str(tmp_path), 'LAZYNEON_WS_PYTHON': sys.executable}
+    feedback = tmp_path/'.lazyneon-workspace/feedback'
     for action in ('batch', 'inject'):
         relay = subprocess.run(['node', str(ROOT/'scripts/domain_feedback.mjs'), action, *(['hallucination_guard.mjs'] if action == 'batch' else [])], input=json.dumps(payload), text=True, capture_output=True, env=relay_env, timeout=30)
         assert relay.returncode == 0, relay.stderr
+        if action == 'batch':
+            records = [json.loads(line) for p in feedback.glob('*.jsonl') for line in p.read_text().splitlines()]
+            assert records[-1]['kind'] == 'fail'
     message = json.loads(relay.stdout)['injectSteps'][0]['ephemeralMessage']
     # A forged hash is a definite failure even when morphology is unavailable.
     assert 'FAIL' in message
-    records = [json.loads(line) for p in (tmp_path/'.lazyneon-workspace/feedback').glob('*.jsonl') for line in p.read_text().splitlines()]
-    assert records[-1]['kind'] == 'fail'
+    # Delivered verdicts quote case paths; inject removes them from the home folder.
+    assert list(feedback.iterdir()) == []
 
 def test_windows_eol_and_exit_code_contract():
     files = ['bin/lazyforensic', 'bin/lazyothers', 'bin/case-mode']

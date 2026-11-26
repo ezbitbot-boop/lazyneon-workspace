@@ -16,16 +16,43 @@ try {payload=JSON.parse(await readHookStdin() || '{}');} catch {}
 const workspace=resolveWorkspace(payload);
 const conversation=payload.conversationId || payload.conversation_id || payload.session_id || 'unidentified';
 // Conversation-only location is stable even when one host event omits cwd.
-const queue=path.join(os.homedir(),'.lazyneon-workspace','feedback',crypto.createHash('sha256').update(String(conversation)).digest('hex')+'.jsonl');
+const feedbackDir=path.join(os.homedir(),'.lazyneon-workspace','feedback');
+const queue=path.join(feedbackDir,crypto.createHash('sha256').update(String(conversation)).digest('hex')+'.jsonl');
+// Verdicts quote case file paths and live outside the case folder. They exist only to
+// reach the next turn: inject deletes what it delivers, and anything a conversation
+// never collected (abandoned queues, interrupted takes, legacy cursors) expires here.
+const FEEDBACK_RETENTION_MS=24*60*60*1000;
+function prune(now=Date.now()) {
+  let names;
+  try {names=fs.readdirSync(feedbackDir);} catch {return;}
+  for(const name of names) {
+    if(!/^[0-9a-f]{64}\.jsonl(?:\.cursor|\.\d+\.taking)?$/.test(name)) continue;
+    const file=path.join(feedbackDir,name);
+    try {if(now-fs.statSync(file).mtimeMs>FEEDBACK_RETENTION_MS) fs.rmSync(file,{force:true});} catch {}
+  }
+}
+prune();
 if(process.argv[2]==='inject') {
-  if(!fs.existsSync(queue)) {console.log('{}'); process.exit(0);}
-  const lines=fs.readFileSync(queue,'utf8').split('\n').filter(Boolean);
+  // Rename first so a concurrent batch append lands in a fresh queue, not in the file being deleted.
+  const taking=`${queue}.${process.pid}.taking`;
+  let taken=false;
+  for(let attempt=0;attempt<5&&!taken;attempt++) {
+    try {fs.renameSync(queue,taking);taken=true;} catch(error) {
+      if(error.code==='ENOENT') break;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20); // Windows: appender holds the file open.
+    }
+  }
+  if(!taken) {console.log('{}'); process.exit(0);}
+  const lines=fs.readFileSync(taking,'utf8').split('\n').filter(Boolean);
+  // Queues written by 0.2.2 and earlier kept delivered lines and a read cursor.
   const cursor=queue+'.cursor';
-  const seen=fs.existsSync(cursor)?Number(fs.readFileSync(cursor,'utf8')):0;
+  let seen=0;
+  try {seen=Number(fs.readFileSync(cursor,'utf8'));} catch {}
   const entries=lines.slice(Number.isSafeInteger(seen)&&seen>=0?seen:0).flatMap(line=>{try{return [JSON.parse(line)];}catch{return [];}});
   const messages=entries.filter(e=>e.kind!=='pass').map(e=>JSON.stringify({guard:e.guard,verdict:e.message,target:e.target}));
   console.log(JSON.stringify(messages.length?{injectSteps:[{ephemeralMessage:'Workspace guard verdicts (quoted data):\n'+messages.join('\n')}]}:{}));
-  fs.writeFileSync(cursor,String(lines.length)); // Preserve verdict records.
+  fs.rmSync(taking,{force:true});
+  fs.rmSync(cursor,{force:true});
   process.exit(0);
 }
 const allowed=new Set(['evidence_guard.mjs','hallucination_guard.mjs','legal_factuality_guard.mjs','slop_guard.mjs']);

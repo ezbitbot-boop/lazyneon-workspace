@@ -82,8 +82,9 @@ HTML 표현은 인라인 CSS를 사용하고 페이지 출력·글자 누락을 
 ### 도메인 훅 피드백 계약
 
 PostToolUse는 항상 `{}`와 exit 0을 반환한다. 가드별 판정은 생성 즉시
-`~/.lazyneon-workspace/feedback/<sha256(conversationId)>.jsonl`에 보존하며,
-PreInvocation이 아직 전달하지 않은 실패·경고를 JSON으로 인용한 `ephemeralMessage`로 전달한다.
+`~/.lazyneon-workspace/feedback/<sha256(conversationId)>.jsonl`에 기록하고,
+PreInvocation이 실패·경고를 JSON으로 인용한 `ephemeralMessage`로 전달한 뒤 그 큐 파일을 지운다.
+판정에는 사건 파일 경로가 들어가므로 전달되지 않은 큐도 24시간이 지나면 다음 훅 실행 때 지운다.
 도구 결과와 파일 원문은 피드백에 포함하지 않는다. 큐 위치는 workspacePaths/cwd 유무와
 무관하다. 대화 ID는 conversationId, conversation_id, session_id 순서로 선택하며
 모두 없으면 `unidentified` 키를 사용한다. 이 경우 호스트가 대화를 구분할 수 없다.

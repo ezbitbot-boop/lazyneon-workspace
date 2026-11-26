@@ -196,15 +196,15 @@ def test_truncated_evidence_cannot_supply_hashes(tmp_path):
     p.write_text(digest+'\n'+'x'*(8*1024*1024))
     assert digest not in report_core.load_evidence_hashes(p)
 
-def test_feedback_keeps_records_and_consumes_once(tmp_path):
+def test_feedback_is_deleted_once_delivered(tmp_path):
     p=tmp_path/'소장.md'; p.write_text('민법 제1500조')
     payload={'workspacePaths':[str(tmp_path)],'conversationId':'retained','tool_name':'write_file','tool_input':{'path':str(p)}}
     node('domain_feedback.mjs','batch','legal_factuality_guard.mjs',payload=payload)
-    queues=list((tmp_path/'.lazyneon-workspace/feedback').glob('*.jsonl')); assert len(queues)==1
-    before=queues[0].read_bytes()
+    feedback=tmp_path/'.lazyneon-workspace/feedback'
+    queues=list(feedback.glob('*.jsonl')); assert len(queues)==1
     assert 'injectSteps' in node('domain_feedback.mjs','inject',payload=payload).stdout
+    assert list(feedback.iterdir())==[]
     assert node('domain_feedback.mjs','inject',payload=payload).stdout.strip()=='{}'
-    assert queues[0].read_bytes()==before
 
 def test_unlinked_audit_record_rejected(tmp_path):
     p=tmp_path/'audit_trail.jsonl'; digest='a'*64

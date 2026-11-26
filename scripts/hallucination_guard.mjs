@@ -579,7 +579,8 @@ async function main() {
 		}
 	}
     let artifactHashCheck=false;
-    const artifact=fs.readFileSync(targetFile,'utf8');
+    // Generators hash LF text; Windows text-mode writes and editors save CRLF.
+    const artifact=fs.readFileSync(targetFile,'utf8').replace(/\r\n/g,'\n');
     if(artifact.startsWith('<!-- lazyneon-artifact:')) {
         const m=artifact.match(/^<!-- lazyneon-artifact:v1 kind=non-report generator=(case_survey|court_evidence_sheet|generate_evidence_doc) sha256=([a-f0-9]{64}) -->\n/);
         const valid=m&&crypto.createHash('sha256').update(artifact.slice(m[0].length),'utf8').digest('hex')===m[2];

@@ -235,6 +235,8 @@ def main(argv=None):
     if not args.artifact_hashes_only:
         errors.extend(require_integrity_root(text, report_path, args.evidence))
     if args.artifact_hashes_only:
+        # Generators hash LF text; Windows text-mode writes and editors save CRLF.
+        text = text.replace('\r\n', '\n')
         header = re.match(r"<!-- lazyneon-artifact:v1 kind=non-report generator=(?:case_survey|court_evidence_sheet|generate_evidence_doc) sha256=([a-f0-9]{64}) -->\n", text)
         if not header or hashlib.sha256(text[header.end():].encode('utf-8')).hexdigest() != header[1]:
             errors.append("Generated artifact header/body mismatch")

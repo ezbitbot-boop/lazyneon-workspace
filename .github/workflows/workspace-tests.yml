@@ -1,5 +1,9 @@
 name: Workspace tests
-on: [push, pull_request]
+# Branch pushes are covered by their pull request; push runs only for main.
+on:
+  push:
+    branches: [main]
+  pull_request:
 env:
   LAZYNEON_OFFLINE: '1'
   LAZYNEON_WS_NO_UPDATE_CHECK: '1'

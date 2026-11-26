@@ -216,7 +216,14 @@ def verified_evidence_text(path):
                                         capture_output=True, text=True, timeout=120)
                 if result.returncode:
                     raise ValueError('Case root hash verification failed: ' + result.stderr)
-                verified.append({'rootHash': result.stdout.strip()})
+                measured = result.stdout.strip()
+                # Matching per-file hashes do not prove membership: a file added
+                # after intake changes the root, so compare with the baseline.
+                baseline = obj.get('rootHash')
+                if baseline and measured != baseline:
+                    raise ValueError('Case root hash differs from the intake baseline rootHash '
+                                     '(evidence membership changed): expected ' + str(baseline) + ', measured ' + measured)
+                verified.append({'rootHash': measured})
             return json.dumps(verified)
     def receipts(obj):
         if isinstance(obj, list):

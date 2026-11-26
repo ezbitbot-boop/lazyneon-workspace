@@ -142,7 +142,7 @@ def protect(paths, journal=None):
         for e in entries:
             rollback_entries[e['path']]['applied'] = e['applied']
             rollback_entries[e['path']]['status'] = e.get('status')
-        unlock(rollback)
+        unlock(rollback, strict=False)  # best-effort rollback; keep the original error
         journal_event(journal, 'rolled-back')
         raise
 
@@ -192,13 +192,29 @@ def recovery_record(journal):
     return record
 
 
-def unlock(record):
+def unlock(record, strict=True):
     if record.get('platform') != sys.platform:
         raise ValueError('Unlock must run on the recorded OS')
+    # Like lock/verify, check every identity before changing anything: a
+    # replacement file at a recorded path must not receive the recorded mode.
+    problems, targets = [], []
     for e in record['entries']:
         p = Path(e['path'])
-        if not p.exists() or p.is_symlink() or e.get('status') == 'protected-by-media':
+        if e.get('status') == 'protected-by-media' or not e.get('applied'):
             continue
+        try:
+            s = p.lstat()
+        except FileNotFoundError:
+            problems.append(f'missing: {p}')
+            continue
+        if stat.S_ISLNK(s.st_mode) or ('dev' in e and 'ino' in e and (s.st_dev, s.st_ino) != (e['dev'], e['ino'])):
+            problems.append(f'identity changed: {p}')
+            continue
+        targets.append(e)
+    if problems and strict:
+        raise ValueError('UNLOCK incomplete (복구 불완전), nothing changed: ' + '; '.join(problems))
+    for e in targets:
+        p = Path(e['path'])
         if 'uchg' in e['applied']: os.chflags(p, e.get('original_flags', 0))
         if 'chattr +i' in e['applied']: checked('chattr', '-i', str(p))
         if 'deny-write ACL' in e['applied']:

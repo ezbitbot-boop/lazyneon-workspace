@@ -45,7 +45,7 @@ def test_shared_windows_python_probe_contract():
 def test_release_docs_and_domain_exclusion():
     for name in ['plugin.json','package.json']:
         data=json.loads((ROOT/name).read_text())
-        assert data['version']=='0.2.1'
+        assert data['version']=='0.2.2'
         assert data['requires']=={'lazyneon':'>=0.3.0'}
     for skill in (ROOT/'skills').glob('*/SKILL.md'):
         assert 'gemini-4-hydrogen' in skill.read_text(), skill
@@ -67,6 +67,7 @@ def test_case_reads_each_evidence_once(tmp_path, command):
     custody=tmp_path/'case/custody'; custody.mkdir(parents=True)
     import hashlib
     (custody/'hashes-start.json').write_text(json.dumps({'evidencePath':str(evidence),'files':[{'path':str(sample),'sha256':hashlib.sha256(b'original').hexdigest()}]}))
+    (custody/'log.jsonl').write_text(json.dumps({'type':'init','evidencePath':str(evidence)})+'\n')  # close requires the intake record
     probe=tmp_path/'probe.mjs'
     probe.write_text("import fs from 'node:fs'; const original=fs.createReadStream; fs.createReadStream=function(p,...a){console.error('EVIDENCE_READ');return original.call(this,p,...a)};")
     result=subprocess.run(['node','--import',str(probe),str(ROOT/'scripts/case_mode.mjs'),command,'--case',str(custody.parent)],text=True,capture_output=True)

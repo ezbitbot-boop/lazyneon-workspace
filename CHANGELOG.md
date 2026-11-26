@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.2 — 2026-11-26
+
+- evidence_guard: glob 쓰기 대상이 증거와 겹치면, 증거가 있는 작업 폴더에서 인라인 인터프리터(`node -e`, `python -c` 등)가 계산된 경로를 쓰거나 지우면, ffmpeg의 가운데 출력 인자가 증거면 거부.
+- 출력 경로가 증거 파일의 하드링크면 거부(`safe_output` inode 비교), 매니페스트는 임시 파일 후 원자적 교체로 저장.
+- mask_korean_pii: 입력·출력·리포트·vault 경로(또는 inode)가 겹치면 거부. vault는 0600으로 원자적 생성.
+- 보고서 검증: 재계산한 케이스 ROOT HASH가 기준선 `rootHash`와 다르면 실패.
+- case-mode close: custody 로그에 맞는 개시 기록이 없으면 `CUSTODY INCOMPLETE`로 실패(해시 결과와 따로 보고).
+- unlock: 모든 항목의 dev/ino를 먼저 확인하고, 교체·누락이 있으면 아무것도 바꾸지 않고 "복구 불완전"으로 실패.
+- evidence_manifest 생성: lstat으로 열거하고 심볼릭 링크는 거부.
+
 ## 0.2.1 — 2026-11-20
 
 - core 제외 경로를 실행 목록과 문서 대조로 단일화하고 README·GEMINI는 정본을 참조.

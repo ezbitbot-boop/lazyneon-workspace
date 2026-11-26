@@ -1,6 +1,6 @@
 # LazyNeon Workspace
 
-Version **0.2.1** · Plugin `lazyneon-workspace` · MIT
+Version **0.2.2** · Plugin `lazyneon-workspace` · MIT
 
 Antigravity / Gemini 4 Neon용 독립 포렌식·한국어 문서·법률 초안 companion 플러그인.
 모델 라우팅과 일반 가드는 LazyNeon core 소유다. 도메인 규칙은 [rules/GEMINI.md](rules/GEMINI.md)를 따른다.
@@ -126,12 +126,12 @@ HTML 표현은 인라인 CSS를 사용하고 페이지 출력·글자 누락을 
 
 미디어 단서 분석: `python scripts/analyze_deepfake_evidence.py <미디어>`. C2PA 바이트 표식은 암호학적 서명 검증 결과가 아니다.
 
-케이스의 `close`는 증거 잠금을 유지합니다. 반출·삭제 전에는
+케이스의 `close`는 증거 잠금을 유지합니다. `custody/log.jsonl`에 이 기준선의 개시(init) 기록이 없으면 해시가 맞아도 `CUSTODY INCOMPLETE`로 실패합니다. 반출·삭제 전에는
 `case-mode unlock --case <작업폴더> --reason "인계 사유"`로 해제합니다.
 해제 후 검증을 재개할 때는 `case-mode lock --case <작업폴더> --reason "재개 사유"`로
 재잠금한 다음 `close`를 실행합니다. 재잠금은 최초 파일 신원·해시·원래 권한을 바꾸지 않습니다.
 
-`lazyforensic manifest <폴더> [-o manifest.json]`는 기본적으로 읽기만 합니다.
+`lazyforensic manifest <폴더> [-o manifest.json]`는 기본적으로 읽기만 합니다. 증거 폴더 안의 심볼릭 링크는 따라가지 않고 거부하며, 증거 파일과 같은 파일(하드링크)인 출력 경로도 거부합니다.
 잠금이 필요하면 `--protect -o manifest.json`을 명시하고, 해제에는
 `case-mode unlock --manifest manifest.json --reason "사유"`를 사용합니다.
 읽기 전용 매체는 `protected-by-media`, immutable/ACL 미지원 파일시스템은

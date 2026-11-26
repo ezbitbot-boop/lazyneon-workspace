@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import {shellCommands,evidenceTokens,readOnlyEvidenceCommand} from './evidence_read_policy.mjs';
+import {shellCommands,evidenceTokens,readOnlyEvidenceCommand,globWriteTouchesEvidence,inlineComputedWrite,workspaceHoldsEvidence} from './evidence_read_policy.mjs';
 import { evidenceIdentity } from './evidence_identity.mjs';
 import {hookTargets, isCoreOwned, dispatchTargets, shellWriteTargets} from './hook_targets.mjs';
 import { workspaceFromSources, resolveTarget } from './hook_workspace.mjs';
@@ -676,7 +676,10 @@ async function main() {
 		const texts = targets.filter(t=>!coreTargets.has(t));
 		const protectedToken=t=>protectedIdentity(t)||isProtectedName(t)||EVIDENCE_SEGMENT_RE.test(t);
         const deniedCommand=commands.find(c=>/\b(?:powershell|pwsh)(?:\.exe)?\b[^|&;\n]*\s-(?:e|ec|en\w*)(?=\s|$)/i.test(c)) || commands.find(c=>evidenceTokens(c).some(protectedToken)&&!readOnlyEvidenceCommand(c,workspace||process.cwd(),protectedToken));
-        const violation = findViolation(texts) || (deniedCommand ? 'Evidence command is not on the read-only allowlist; use cat, sha256sum, or lazyforensic scan with output in the case working folder' : null);
+        const base=workspace||process.cwd();
+        const globCommand=commands.find(c=>globWriteTouchesEvidence(c,base,protectedToken));
+        const inlineCommand=commands.find(inlineComputedWrite);
+        const violation = findViolation(texts) || (globCommand ? 'Wildcard write target matches evidence; name the files explicitly outside the evidence folder' : null) || (inlineCommand && workspaceHoldsEvidence(base,protectedToken) ? 'Inline interpreter code writes or deletes a computed path while evidence is present; use a script file with literal output paths' : null) || (deniedCommand ? 'Evidence command is not on the read-only allowlist; use cat, sha256sum, or lazyforensic scan with output in the case working folder' : null);
 		if (violation) {
 			console.error(`[FORENSIC INTEGRITY GUARD] Write operation BLOCKED — ${violation}`);
 			console.error('[HINT] Evidence files are read-only. 사본도 같은 확장자(.raw/.E01 등)면 차단된다 —');

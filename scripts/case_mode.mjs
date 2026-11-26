@@ -330,6 +330,23 @@ async function cmdInit(argv) {
 // ---------------------------------------------------------------------------
 // 'close' command
 // ---------------------------------------------------------------------------
+function custodyLogProblems(logFile, baseline) {
+    let text;
+    try { text = fs.readFileSync(logFile, 'utf8'); }
+    catch { return [`custody log missing: ${logFile}`]; }
+    const events = [];
+    for (const line of text.split('\n')) {
+        if (!line.trim()) continue;
+        try { events.push(JSON.parse(line)); }
+        catch { return [`custody log has an unreadable line: ${logFile}`]; }
+    }
+    const same = (a, b) => typeof a === 'string' && typeof b === 'string' && path.resolve(a) === path.resolve(b);
+    const init = events.find(e => e && e.type === 'init' && same(e.evidencePath, baseline.evidencePath)
+        && (!baseline.rootHash || e.rootHash === baseline.rootHash)
+        && (!baseline.caseId || e.caseId === baseline.caseId));
+    return init ? [] : ['no intake (init) event matching this baseline (evidencePath, rootHash, caseId) in custody/log.jsonl'];
+}
+
 async function cmdClose(argv) {
 	let caseDir = null;
     let expectRoot = null;
@@ -420,10 +437,14 @@ async function cmdClose(argv) {
     if(baseline.protection && baseline.protection.platform!==process.platform) console.warn('다른 OS — 보호 미검증; 해시로 검증합니다. 해제/재잠금은 원래 OS에서 실행하십시오.');
 	const protectionProblems = baseline.protection ? await protection('verify',{record:baseline.protection}) : (console.warn('보호 미적용(구버전): 해시로 검증합니다'), []);
     for(const problem of protectionProblems) console.error(problem);
-    const hasProblems = rootMismatch || rootError !== null || protectionProblems.length > 0 || changed.length > 0 || missing.length > 0 || unexpected.length > 0;
+	// Matching hashes do not prove an unbroken custody record: the intake
+	// event for this baseline must still be in the log.
+	const logFile = path.join(absCaseDir, 'custody', 'log.jsonl');
+	const custodyProblems = custodyLogProblems(logFile, baseline);
+	for (const problem of custodyProblems) console.error(`CUSTODY INCOMPLETE: ${problem}`);
+    const hasProblems = rootMismatch || rootError !== null || protectionProblems.length > 0 || custodyProblems.length > 0 || changed.length > 0 || missing.length > 0 || unexpected.length > 0;
 
 	// Append close event to custody log
-	const logFile = path.join(absCaseDir, 'custody', 'log.jsonl');
 	appendCustodyLog(logFile, {
 		type: 'close',
         rootHash, expectRoot, rootMismatch, rootError,
@@ -431,6 +452,7 @@ async function cmdClose(argv) {
 		caseDir: absCaseDir,
 		evidencePath: baseline.evidencePath,
 		protectionProblems,
+		custodyProblems,
 		status: hasProblems ? 'INTEGRITY_FAIL' : 'ok',
 		changed,
 		missing,
@@ -449,6 +471,11 @@ async function cmdClose(argv) {
 				console.error(`             원본: ${c.originalSha256}`);
 				console.error(`             현재: ${c.currentSha256}`);
 			}
+		}
+		if (custodyProblems.length > 0) {
+			const hashesOk = changed.length === 0 && missing.length === 0 && unexpected.length === 0 && !rootMismatch && rootError === null;
+			console.error(`\n  보관 이력 불완전 (${custodyProblems.length}건)${hashesOk ? ' — 파일 해시는 일치하지만 개시 기록이 없어 연속성을 증명할 수 없습니다' : ''}:`);
+			for (const p of custodyProblems) console.error(`    CUSTODY  ${p}`);
 		}
 		if (missing.length > 0) {
 			console.error(`\n  삭제된 파일 (${missing.length}개):`);

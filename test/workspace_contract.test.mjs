@@ -24,9 +24,9 @@ test('core inputs are not reinjected or changed',()=>temporary(p=>{
  assert.deepEqual(fs.readdirSync(core).map(n=>[n,fs.readFileSync(path.join(core,n),'utf8')]),before);
  assert.deepEqual(fs.readdirSync(p),['.lazyneon']);
 }));
-test('domain relay registers exactly four domain guards and no generic hooks',()=>{
+test('domain relay registers exactly five domain guards and no generic hooks',()=>{
  const hooks=JSON.parse(fs.readFileSync(path.join(root,'hooks.json'))).hooks;
- const guards=['evidence_guard.mjs','hallucination_guard.mjs','legal_factuality_guard.mjs','slop_guard.mjs'];
+ const guards=['evidence_guard.mjs','hallucination_guard.mjs','legal_factuality_guard.mjs','slop_guard.mjs','citation_guard.mjs'];
  assert.deepEqual(Object.keys(hooks).sort(),['PostToolUse','PreInvocation','PreToolUse','SessionStart']);
  assert.equal(hooks.PostToolUse.length,1);
  assert.deepEqual(hooks.PostToolUse[0].hooks.map(h=>h.command),[

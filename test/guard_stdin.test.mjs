@@ -6,7 +6,7 @@ import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const GUARDS = ['evidence_guard.mjs', 'hallucination_guard.mjs', 'legal_factuality_guard.mjs', 'slop_guard.mjs'];
+const GUARDS = ['evidence_guard.mjs', 'hallucination_guard.mjs', 'legal_factuality_guard.mjs', 'slop_guard.mjs', 'citation_guard.mjs'];
 
 test('domain guards read stdin through the one shared reader', () => {
  for (const guard of GUARDS) {

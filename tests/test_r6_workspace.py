@@ -8,6 +8,8 @@ import time
 import pytest
 ROOT = Path(__file__).resolve().parents[1]
 GUARDS = ['evidence_guard.mjs', 'hallucination_guard.mjs', 'legal_factuality_guard.mjs', 'slop_guard.mjs']
+# hooks.json relay order; citation_guard has its own tests (tests/test_citation_grounding.py).
+RELAY = [*GUARDS, 'citation_guard.mjs']
 
 @pytest.fixture
 def ctx(tmp_path, monkeypatch):
@@ -27,7 +29,7 @@ def rows(ctx):
     return [json.loads(line) for p in ctx.rglob('*.jsonl') if p.parent.name == 'feedback' for line in p.read_text().splitlines()]
 
 def batch(p, *guards, env=None):
-    return run('domain_feedback.mjs', p, 'batch', *(guards or GUARDS), env=env)
+    return run('domain_feedback.mjs', p, 'batch', *(guards or RELAY), env=env)
 
 @pytest.mark.parametrize('header', ['Add File', 'Update File', 'Delete File', 'Move to'])
 @pytest.mark.parametrize('wrap', ['patch', 'input', 'encoded', 'freeform', 'multi'])
@@ -136,7 +138,7 @@ def test_core_research_reports_checked_and_journals_excluded(ctx,guard):
             if guard != 'slop_guard.mjs' or n.startswith('report.'):
                 assert r.stderr and control.stderr
         batch(p)
-    assert len(rows(ctx))==12
+    assert len(rows(ctx))==3*len(RELAY)
     audit=(ctx/'.lazyneon-workspace/audit_trail.jsonl').read_text()
     for n in ['report.md','report.html','SYNTHESIS.md']:
         assert n in audit
@@ -230,7 +232,7 @@ def test_patch_relay_matches_write_failures(ctx):
     batch(p)
     after=rows(ctx)[len(before):]
     assert {r['guard'] for r in before if r['kind']=='fail'}=={r['guard'] for r in after if r['kind']=='fail'}
-    assert len(before)==len(after)==4
+    assert len(before)==len(after)==len(RELAY)
     assert any(r['kind']=='fail' for r in after)
 
 

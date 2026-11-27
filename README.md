@@ -76,7 +76,19 @@ kordoc MCP는 Node/npx가 필요하며 최초 패키지 설치에는 npm 레지�
 
 [도메인 가드 대상](docs/domain-targets.md)에서 core 예약 상태·작업 저널의 정확한 제외 경로와 최종 산출물 검사 범위를 확인한다.
 자체 상태는 `.lazyneon-workspace/`, 환경변수는 `LAZYNEON_WS_*`에 둔다.
-등록된 도메인 가드는 evidence_guard, hallucination_guard, legal_factuality_guard, slop_guard다.
+등록된 도메인 가드는 evidence_guard, hallucination_guard, legal_factuality_guard, slop_guard, citation_guard다.
+
+| 훅 | 스크립트 | 대상 | 결과 |
+| --- | --- | --- | --- |
+| PreToolUse | `evidence_guard.mjs pre-tool-use` | 증거 경로를 건드리는 모든 쓰기·명령 | deny (fail-closed) |
+| PostToolUse | `evidence_guard.mjs` | 쓴 파일 | `.lazyneon-workspace/audit_trail.jsonl` 해시 체인 기록 |
+| PostToolUse | `hallucination_guard.mjs` | 보고서 쓰기 (`verify_report.py`) | FAIL/NOT_CHECKED 피드백 (fail-closed) |
+| PostToolUse | `legal_factuality_guard.mjs` | 법률 문서 쓰기 | FAIL 피드백 (fail-closed) |
+| PostToolUse | `slop_guard.mjs` | 보고서 쓰기 | WARN만 |
+| PostToolUse | `citation_guard.mjs` | 보고서 쓰기 + 보고서 옆 증거 폴더 | WARN만. `LAZYNEON_WS_CITATION_STRICT=1`이면 FAIL |
+| PreInvocation | `domain_feedback.mjs inject` | 위 판정을 다음 턴에 전달 | 인용된 메시지 |
+
+PostToolUse 가드는 `domain_feedback.mjs batch` 한 명령으로 실행되며, 쓰기를 되돌리지 않고 판정을 다음 턴에 전달한다.
 사후 실패는 원본을 복구하는 기능이 아니며, 수정·재검증 전 결과 제출을 금지한다.
 
 ## 활성 스킬
@@ -124,6 +136,23 @@ HWP5 OLE 경로에는 `olefile`이 필요하다. 미설치 시 설치 안내 오
 원본 해시를 측정하고 파싱한 뒤 보고서를 작성하고 verify_report.py로 대조한다.
 타임라인은 `python skills/forensic-timeline/scripts/generate_timeline.py --input events.json --output timeline.html`로 만든다.
 HTML 표현은 인라인 CSS를 사용하고 페이지 출력·글자 누락을 검수한다.
+
+### 인용 대조 (citation grounding)
+
+보고서가 인용한 값이 증거 파일에서 나왔는지 LLM 없이 대조한다. Antigravity 밖(다른 앱이나 모델로 쓴 보고서)에서도 쓸 수 있다.
+
+```bash
+python scripts/citation_grounding.py 보고서.md --evidence evidence/          # 표 + JSON
+python scripts/citation_grounding.py 보고서.md --evidence evidence/ a.docx --json
+lazyforensic cite 보고서.md --evidence evidence/ --strict                   # 근거 없는 값이 있으면 종료 코드 1
+```
+
+- 대조 대상: 16자 이상 hex 해시와 `e3b0c4…b855` 같은 약칭, 날짜·일시·시각, 인용문(`"…"`, `“…”`, `'…'`, `「…」`, `『…』`), 파일명·Windows 경로, 단위가 붙은 수치(건·명·원·만원·%·bytes·MB…), 직함·담당자 칸의 한국어 인명, 포렌식 도구명.
+- `grounded`: 증거 텍스트에 있음. docx/hwpx/xlsx/pptx 내부 XML 텍스트, NFC 정규화, 폭 없는 문자 제거 후 비교하고, 날짜는 `2014. 12. 4.`와 `2014-12-04`를 같은 값으로 본다.
+- `computed`: 증거에서 계산되는 값. 파일·압축 멤버의 sha256/sha1/md5(6자 이상 앞·뒷부분 포함), 파일 크기, 증거 시각의 ±9시간(UTC↔KST).
+- `labelled`: 그 줄에 계산·환산·computed 같은 표시가 있는 값(해시는 제외). `hedged`: 그 줄에 `미확인`이 있거나, 자료에 없다고 쓴 인용·파일. 나머지는 `unsupported`.
+- 훅(`citation_guard.mjs`)은 보고서 옆 증거 폴더(`evidence/`, `증거/`, `자료/`, `sources/` 등)와 매니페스트를 근거로 쓰며 WARN만 남긴다. `LAZYNEON_WS_CITATION_STRICT=1`이면 근거 없는 값이나 검사 불가를 FAIL/차단으로 보고한다.
+- 따옴표 없는 간접 화법과 의역은 대조하지 않는다. 이 검사는 `verify_report.py`를 대신하지 않는다.
 
 미디어 단서 분석: `python scripts/analyze_deepfake_evidence.py <미디어>`. C2PA 바이트 표식은 암호학적 서명 검증 결과가 아니다.
 

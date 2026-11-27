@@ -45,7 +45,7 @@ export async function readHookStdin(timeout = 1500) {
     process.stdin.resume();
   });
 }
-// Domain guards (evidence, hallucination, legal_factuality, slop) share this reader.
+// Domain guards (evidence, hallucination, legal_factuality, slop, citation) share this reader.
 // The host writes JSON and closes the pipe; a complete JSON document resolves at once,
 // so the limit only matters when the host is slow. 50ms dropped late input and let it
 // pass (fail-open), hence 1500ms. fstat().size is not used: it is 0 for pipes on Linux/Windows.

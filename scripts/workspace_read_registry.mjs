@@ -38,6 +38,7 @@ export const readScripts={
   "scripts/audit_evidence_integrity.py": "integrity",
   "scripts/certify_evidence_file.py": "certify",
   "scripts/korean_morph_grounding.py": "morph",
+  "scripts/citation_grounding.py": "cite",
   "skills/forensic-audit/scripts/audit_timestamps.py": "timestamps",
   "skills/forensic-video/scripts/forensic_video_audit.py": "video",
   "skills/telegram-chat-extractor/scripts/parse_telegram.py": "telegram"
@@ -83,5 +84,6 @@ export const readFlags={
     integrity:["--scan-dir", "--file", "--report", "--algorithms", "--output", "-o", "--output-json"],
     certify:["--url", "--note", "--case", "--output", "--output-md", "--reviewer"],
     morph:["--source", "--target", "--text", "--threshold", "--filter-procedural", "--high-fidelity", "--old-korean", "--json"],
+    cite:["--evidence", "--format", "--json", "--strict", "--max-hash-mb"],
     telegram:["--output", "-o", "--events-out", "--keyword", "-k", "--sender", "-s", "--summary"],
 };

@@ -210,6 +210,7 @@ DOCUMENTED = [
  ('scripts/audit_evidence_integrity.py','integrity','--scan-dir evidence --file evidence/b --report evidence/report --algorithms sha256 --output-json out.json -o out.md'),
  ('scripts/certify_evidence_file.py','certify','--url example --note note --case case --reviewer who --output out.json --output-md out.md'),
  ('scripts/korean_morph_grounding.py','morph','--source evidence/b --target evidence/a --text words --threshold 0.7 --filter-procedural --high-fidelity --old-korean --json'),
+ ('scripts/citation_grounding.py','cite','--evidence evidence --format both --strict --max-hash-mb 64'),
 ]
 @pytest.mark.parametrize('script,sub,flags',DOCUMENTED)
 def test_r12_documented_script_flags(ctx,script,sub,flags):

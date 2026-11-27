@@ -55,7 +55,7 @@ if(process.argv[2]==='inject') {
   fs.rmSync(cursor,{force:true});
   process.exit(0);
 }
-const allowed=new Set(['evidence_guard.mjs','hallucination_guard.mjs','legal_factuality_guard.mjs','slop_guard.mjs']);
+const allowed=new Set(['evidence_guard.mjs','hallucination_guard.mjs','legal_factuality_guard.mjs','slop_guard.mjs','citation_guard.mjs']);
 const scripts=process.argv.slice(3);
 for(const script of scripts) if(!allowed.has(script)) throw new Error('Unknown domain guard');
 function record(guard,target,kind,message) {

@@ -147,11 +147,11 @@ class HallucinationGuardTests(unittest.TestCase):
         data = json.loads((ROOT / "hooks.json").read_text(encoding="utf-8"))
         post = data["hooks"]["PostToolUse"]
         first = post[0]["hooks"]
-        # One domain relay runs all four guards; individual hook count is not guard count.
+        # One domain relay runs all five guards; individual hook count is not guard count.
         self.assertEqual(len(first), 1)
         self.assertEqual(first[0]["command"].split(), [
             "node", "./scripts/domain_feedback.mjs", "batch", "evidence_guard.mjs",
-            "hallucination_guard.mjs", "legal_factuality_guard.mjs", "slop_guard.mjs",
+            "hallucination_guard.mjs", "legal_factuality_guard.mjs", "slop_guard.mjs", "citation_guard.mjs",
         ])
         cmds = [h["command"] for h in first]
         self.assertTrue(any("hallucination_guard" in c for c in cmds))

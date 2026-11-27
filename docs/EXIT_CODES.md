@@ -17,6 +17,7 @@
 | 스크립트 | 0 | 1 | 2 | 3 | 78 |
 |:---|:---:|:---:|:---:|:---:|:---:|
 | `verify_report.py` | PASS/WARN | FAIL, `--strict`+WARN | 보고서 없음/인자 오류 | — | — |
+| `citation_grounding.py` | 대조 완료(근거 없는 값은 목록으로 보고) | `--strict`이고 근거 없는 값 있음 | 보고서·증거 경로 없음/인자 오류 | — | — |
 | `verify_claim_ledger.py` | 위반 없음 또는 --enforce 미지정 | --enforce 지정 시 위반 있음 | (argparse) | — | — |
 | `parse_kakao.py` | 파싱 완료 | — | 입력 파일 없음/판별 실패 | — | — |
 | `audit_timestamps.py` | 감사 완료 | — | 파일 없음 | — | — |

@@ -4,7 +4,7 @@ import re
 import shlex
 import subprocess
 import pytest
-from test_r6_workspace import ROOT, GUARDS, ctx, event, run
+from test_r6_workspace import ROOT, GUARDS, RELAY, ctx, event, run
 
 
 # PreInvocation deletes the queue it delivers; post() keeps what it saw for assertions.
@@ -52,7 +52,7 @@ def test_patch_move_checks_only_destination(ctx):
     (ctx/'new.md').write_text('ordinary notes')
     assert post(ctx, '*** Update File: old.md\n*** Move to: new.md') == {}
     checked = [r for r in rows(ctx) if r['kind'] != 'skip']
-    assert len(checked) == 4
+    assert len(checked) == len(RELAY)
     assert {r['target'] for r in checked} == {str(ctx/'new.md')}
 
 
@@ -60,14 +60,14 @@ def test_missing_move_destination_still_fails(ctx):
     out = post(ctx, '*** Update File: old.md\n*** Move to: absent.md')
     assert '미확인' in str(out)
     failures = [r for r in rows(ctx) if r['kind'] == 'unchecked']
-    assert len(failures) == 4
+    assert len(failures) == len(RELAY)
     assert {r['target'] for r in failures} == {str(ctx/'absent.md')}
 
 
 def test_missing_write_still_fails(ctx):
     payload = event(ctx, {'path': 'absent.md'})
     dispatch('PostToolUse', payload)
-    assert len(rows(ctx)) == 4
+    assert len(rows(ctx)) == len(RELAY)
     assert all(r['kind'] == 'unchecked' for r in rows(ctx))
     assert '미확인' in dispatch('PreInvocation', payload)[0].stdout
 
@@ -97,7 +97,7 @@ def test_lazyneon_user_reports_are_checked(ctx, relative):
     target.write_text('민법 제1500조.')
     payload = event(ctx, {'path': str(target)}, 'mcp__files__write_file')
     dispatch('PostToolUse', payload)
-    assert len(rows(ctx)) == 4
+    assert len(rows(ctx)) == len(RELAY)
     assert {r['target'] for r in rows(ctx)} == {str(target)}
     if target.suffix == '.md':
         assert any(r['guard'] == 'legal_factuality_guard.mjs' and r['kind'] == 'fail' for r in rows(ctx))
@@ -152,7 +152,7 @@ def test_mixed_patch_keeps_writes_and_move_destination(ctx):
     (ctx/'added.md').write_text('ordinary notes')
     out = post(ctx, '*** Delete File: gone.md\n*** Update File: old.md\n*** Move to: new.md\n*** Add File: added.md\n+ordinary notes')
     assert 'FAIL' in str(out)
-    assert len(rows(ctx)) == 8
+    assert len(rows(ctx)) == 2 * len(RELAY)
     assert {r['target'] for r in rows(ctx)} == {str(ctx/'new.md'), str(ctx/'added.md')}
     assert any(r['guard'] == 'legal_factuality_guard.mjs' and r['kind'] == 'fail' for r in rows(ctx))
 

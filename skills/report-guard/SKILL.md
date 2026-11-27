@@ -32,12 +32,15 @@ description: "보고서/문서 할루시네이션 검증 — 금지문구/근거
 python scripts/verify_report.py "보고서초안.md" --evidence audit.json --timeline events.json --json
 # 슬래시/채팅 어느 쪽이든 동일
 python scripts/verify_report.py "보고서초안.md" --evidence audit.json --json
+# 인용 값(해시·일시·인용문·파일명·단위 수치·인명·도구)과 증거 파일 대조 — 근거 없는 값 목록
+python scripts/citation_grounding.py "보고서초안.md" --evidence evidence/
 ```
 
 ## Antigravity / Gemini
 
 - 이 스킬은 결정적 CLI로 검증하며 모델 선택은 코어 정책을 따른다
 - 동시에 호스트 `hallucination_guard.mjs`가 `PostToolUse`에서 동일 검증을 **자동 재실행**하도록 설계되어 있다 (훅 등록 환경에서만 동작). 훅이 없으면 이 스킬 호출이 유일한 검사다.
+- `citation_guard.mjs`는 보고서가 인용한 값을 증거 폴더와 대조해 근거 없는 값이 있으면 WARN만 남긴다(쓰기를 막지 않음). WARN을 받으면 위 `citation_grounding.py`로 목록을 확인하고 증거 값으로 고치거나 `[미확인]`으로 표시한다. `LAZYNEON_WS_CITATION_STRICT=1`이면 FAIL로 차단한다.
 - `보고서` 또는 `검토해줘`가 포함된 쓰기는 이 게이트 대상이다 (훅 미설치·스킵 경로는 `docs/GAPS.md` 참조)
 
 ## 슬래시 명령어

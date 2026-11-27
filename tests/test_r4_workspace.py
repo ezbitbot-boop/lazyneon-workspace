@@ -151,7 +151,7 @@ def test_post_feedback_reaches_model(tmp_path,tool):
     assert all('domain_feedback.mjs batch' in h['command'] for group in hooks['PostToolUse'] for h in group['hooks'])
     p=tmp_path/'소장.md'; p.write_text('민법 제1500조에 기하여 청구한다.')
     payload={'workspacePaths':[str(tmp_path)],'conversationId':'one','tool_name':tool,'tool_input':{'server':'kordoc','tool':'fill_form','args':{'path':str(p)}} if tool in {'call_mcp_tool','CallMcpTool'} else {'path':str(p)}}
-    r=node('domain_feedback.mjs','batch','evidence_guard.mjs','hallucination_guard.mjs','legal_factuality_guard.mjs','slop_guard.mjs',payload=payload)
+    r=node('domain_feedback.mjs','batch','evidence_guard.mjs','hallucination_guard.mjs','legal_factuality_guard.mjs','slop_guard.mjs','citation_guard.mjs',payload=payload)
     assert r.returncode == 0 and r.stdout.strip() == '{}'
     assert node('domain_feedback.mjs','inject',payload={**payload,'conversationId':'two'}).stdout.strip() == '{}'
     result=node('domain_feedback.mjs','inject',payload=payload)

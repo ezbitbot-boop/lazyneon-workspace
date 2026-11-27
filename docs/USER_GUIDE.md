@@ -29,7 +29,7 @@ kordoc MCP는 Node/npx가 필요하며 최초 패키지 설치에는 npm 레지�
 
 `.lazyneon/` 전체를 제외하지 않는다. core 예약 상태 경로와 `.lazyneon/ulw-research/<session>/{SYNTHESIS.md,report.md,report.html,verify-*.md,sources/**}`만 검증·차단·해시 감사에서 제외한다. 그 밖의 사용자 파일은 검사한다.
 자체 상태는 `.lazyneon-workspace/`, 환경변수는 `LAZYNEON_WS_*`에 둔다.
-등록된 도메인 가드는 evidence_guard, hallucination_guard, legal_factuality_guard, slop_guard다.
+등록된 도메인 가드는 evidence_guard, hallucination_guard, legal_factuality_guard, slop_guard, citation_guard다.
 사후 실패는 원본을 복구하는 기능이 아니며, 수정·재검증 전 결과 제출을 금지한다.
 
 ## 활성 스킬

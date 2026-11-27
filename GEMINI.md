@@ -9,7 +9,7 @@
 - 고정 식별자 `.lazyneon/pins.md`, 범위 잠금 `.lazyneon/ulw-scope.md`: 두 파일의 읽기·주입은 core SessionStart가 담당한다. Workspace는 두 파일을 읽어 재주입하거나 생성·수정하지 않는다.
 - 자체 상태·고정 식별자·감사 로그는 `.lazyneon-workspace/`, 자체 환경변수는 `LAZYNEON_WS_*`를 쓴다.
 - 형제 폴더의 plugin.json 이름·버전으로 LazyNeon core >=0.3.0을 읽기 전용 확인한다. 미설치·비호환은 매 세션 경고하며 차단하거나 자동 설치하지 않는다.
-- evidence_guard, hallucination_guard, legal_factuality_guard, slop_guard만 도메인 가드로 등록한다.
+- evidence_guard, hallucination_guard, legal_factuality_guard, slop_guard, citation_guard만 도메인 가드로 등록한다.
 - 사후 가드는 이미 수행된 쓰기를 되돌리지 않는다. FAIL은 수정·재검증 전 제출 금지를 뜻한다. 실제 호스트 이벤트 전달은 별도 실연동 검증이 필요하다.
 - 사용 가능한 호스트 도구 스키마를 확인한다. 이 플러그인은 서브에이전트 호출 형식이나 모델 역할을 강제하지 않는다.
 - 큰 문서는 100줄 이하 청크로 편집하고 원문을 재열람한다.

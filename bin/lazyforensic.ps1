@@ -31,6 +31,7 @@ lazyforensic - 증거 선조사 CLI 래퍼 (외부 STT는 --upload-audio 동의 
   lazyforensic afp <폴더>             오디오 지문 유사 쌍 (fpcalc)
   lazyforensic osint <닉네임>         sherlock OSINT (외부 쿼리 — 동의 필요)
   lazyforensic timeline --manifest m.json ...   다중 소스 시각 병합
+  lazyforensic cite <보고서.md> --evidence <폴더>  보고서 인용 값(해시·일시·인용문·수치) 증거 대조
   lazyforensic sheet <manifest.json> [--party 갑] 서증 목록표 초안
   lazyforensic export <manifest.json> -o e.json   lazyothers evidence.json 변환
   lazyforensic dlp <로그.csv>          DLP 로그 -> 체크리스트 표 (탐지 아님, 정리)
@@ -52,6 +53,7 @@ switch ($cmd) {
     "deepfake" { & $Py @PyArgs (Join-Path $Root "scripts/analyze_deepfake_evidence.py") @rest; exit $LASTEXITCODE }
     "timestamps" { & $Py @PyArgs (Join-Path $Root "skills/forensic-audit/scripts/audit_timestamps.py") @rest; exit $LASTEXITCODE }
     "verify" { & $Py @PyArgs (Join-Path $Root "scripts/verify_report.py") @rest; exit $LASTEXITCODE }
+    "cite" { & $Py @PyArgs (Join-Path $Root "scripts/citation_grounding.py") @rest; exit $LASTEXITCODE }
     "evtx" { if ($rest.Count -eq 0) { $rest = @("hayabusa.exe", "chainsaw.exe") }; & $Py @PyArgs (Join-Path $Root "scripts/check_tool.py") @rest; exit $LASTEXITCODE }
     "memory" { if ($rest.Count -eq 0) { $rest = @("MemProcFS.exe", "vol.py") }; & $Py @PyArgs (Join-Path $Root "scripts/check_tool.py") @rest; exit $LASTEXITCODE }
 

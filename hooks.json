@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ./scripts/domain_feedback.mjs batch evidence_guard.mjs hallucination_guard.mjs legal_factuality_guard.mjs slop_guard.mjs",
+            "command": "node ./scripts/domain_feedback.mjs batch evidence_guard.mjs hallucination_guard.mjs legal_factuality_guard.mjs slop_guard.mjs citation_guard.mjs",
             "timeout": 125
           }
         ]

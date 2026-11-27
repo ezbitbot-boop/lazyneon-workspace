@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- citation_guard (새 도메인 가드) + `scripts/citation_grounding.py` CLI(`lazyforensic cite`): 보고서가 인용한 해시·일시·인용문·파일명·단위 수치·인명·도구명을 증거 파일(docx/hwpx/xlsx 내부 텍스트 포함)과 대조해 근거 없는 값을 표·JSON으로 보고. 날짜 형식 차이, UTC↔KST 9시간 환산, 파일 해시·크기 계산값, 폭 없는 문자, 계산 표시·미확인 표시가 붙은 값은 근거 없음으로 세지 않음. 훅은 경고만 하고 쓰기를 막지 않으며, `LAZYNEON_WS_CITATION_STRICT=1`일 때만 FAIL로 차단.
+- 보고서·증거 폴더 판정(`shouldGuard`, `sourceCandidates`, `evidenceCandidates`, 메신저 내보내기 제외)을 `report_scope.mjs`로 옮겨 hallucination_guard와 citation_guard가 같은 판정을 쓰게 함(hallucination_guard 동작 변화 없음).
 - evidence_guard: 폴더 이름 `evidence` 검사를 작업 폴더 기준 경로에만 적용. `…/Evidence/case1` 같은 상위 폴더 이름 때문에 모든 쓰기가 막히던 문제 수정. 작업 폴더 밖 경로와 이름이 evidence인 작업 폴더는 계속 차단.
 - evidence_guard: 검사 중 예외가 나면 명시적으로 deny. Windows에서 glob 쓰기 대상을 펼치지 못하던 문제 수정.
 - domain_feedback: 전달한 판정 큐는 바로 삭제하고, 전달되지 않은 큐는 24시간 뒤 삭제.

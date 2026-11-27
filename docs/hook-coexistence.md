@@ -8,7 +8,7 @@
 | --- | --- | --- | --- |
 | SessionStart | 일반 규칙·라우팅·companion | 도메인 규칙·core 상태 | 각 injectSteps를 누적, 상태 소유권 분리 |
 | PreToolUse | write_chunk_guard | evidence_guard pre-tool-use | 어느 하나라도 deny면 실행 금지, 빈 응답은 허용 결정이 아님 |
-| PostToolUse | post_tool_feedback batch (markdown/json 및 matcher 해당 시 lookup) | domain_feedback batch (4개 도메인 가드) | 둘 다 {} 반환, 각자 큐에 결과 보존 |
+| PostToolUse | post_tool_feedback batch (markdown/json 및 matcher 해당 시 lookup) | domain_feedback batch (5개 도메인 가드) | 둘 다 {} 반환, 각자 큐에 결과 보존 |
 | PreInvocation | post_tool_feedback inject, usage_guard | domain_feedback inject | 인용된 ephemeralMessage를 누적, 서로 덮어쓰지 않음 |
 | Stop | stop_claim_guard, reply_format_guard | 없음 | core의 종료 계약 유지 |
 

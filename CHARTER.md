@@ -6,7 +6,7 @@ Independent domain companion for Antigravity / Gemini 4 Neon. Model routing belo
 - Documents: Korean parsing, PII masking, evidence stamping/binding, financial analysis, legal drafts and writing refinement.
 - State: `.lazyneon-workspace/`; own settings: `LAZYNEON_WS_*`.
 - Core `.lazyneon/pins.md` and `.lazyneon/ulw-scope.md`: optional read-only inputs.
-- No automatic updates or other-plugin detection. Only four domain guards registered.
+- No automatic updates or other-plugin detection. Only five domain guards registered.
 - No acquisition/admissibility guarantees, invented facts, unapproved audio transmission or simulated verification.
 - `observed`, `heuristic`, `model-assisted` claims require sources and limitations. Examiner verification requires a recorded review.
 - `contracts/` pins and historical validation receipts remain preserved provenance; the removed envelope adapter is not an active pipeline.
